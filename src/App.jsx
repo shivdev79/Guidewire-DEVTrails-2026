@@ -343,6 +343,49 @@ export default function App() {
       {/* Layout Content */}
       <div style={{ background: '#ffffff', borderRadius: '40px 40px 0 0', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#333333' }}>
         
+        {/* Why Choose AEGIS Section */}
+        <div style={{ maxWidth: '1000px', width: '100%', marginBottom: '100px', textAlign: 'center' }}>
+          <div style={{ color: '#FFC72C', fontWeight: 800, letterSpacing: '1px', marginBottom: '16px' }}>WHY CHOOSE AEGIS?</div>
+          <h2 style={{ fontSize: '3rem', color: '#00678a', margin: '0 0 24px 0', lineHeight: 1.2, fontWeight: 800 }}>
+            Reliable. Intelligent. Instant.
+          </h2>
+          <p style={{ fontSize: '1.25rem', color: '#555555', fontFamily: '"Poppins", sans-serif', lineHeight: 1.8, marginBottom: '32px', fontWeight: 500 }}>
+            At AEGIS, we redefine protection for the modern gig economy.
+          </p>
+          <p style={{ fontSize: '1.1rem', color: '#666666', fontFamily: '"Poppins", sans-serif', lineHeight: 1.7, marginBottom: '48px' }}>
+            Whether it’s extreme weather conditions, hazardous air quality, civic disruptions, or unexpected platform outages, AEGIS stands by workers when their income is at risk. Our system doesn’t just react—it predicts, verifies, and responds in real time.
+          </p>
+          
+          <div style={{ background: 'rgba(0, 103, 138, 0.03)', padding: '40px', borderRadius: '24px', border: '1px solid rgba(0, 103, 138, 0.1)', textAlign: 'left', marginBottom: '40px' }}>
+            <p style={{ fontSize: '1.1rem', color: '#333333', fontFamily: '"Poppins", sans-serif', fontWeight: 600, marginBottom: '24px' }}>
+              Powered by advanced AI models and a zero-trust Double-Lock Engine, AEGIS ensures that every payout is:
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <CheckCircle size={24} color="#00678a" />
+                <span style={{ fontSize: '1.1rem', fontFamily: '"Poppins", sans-serif' }}><strong style={{ color: '#00678a' }}>Accurate</strong> – No false claims, no missed risks</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <CheckCircle size={24} color="#00678a" />
+                <span style={{ fontSize: '1.1rem', fontFamily: '"Poppins", sans-serif' }}><strong style={{ color: '#00678a' }}>Instant</strong> – Automated settlements within seconds</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <CheckCircle size={24} color="#00678a" />
+                <span style={{ fontSize: '1.1rem', fontFamily: '"Poppins", sans-serif' }}><strong style={{ color: '#00678a' }}>Transparent</strong> – Fully explainable decision logic</span>
+              </div>
+            </div>
+          </div>
+
+          <p style={{ fontSize: '1.1rem', color: '#666666', fontFamily: '"Poppins", sans-serif', lineHeight: 1.7, marginBottom: '32px' }}>
+            From preventing losses through proactive alerts to enabling instant, paperwork-free payouts, AEGIS delivers a safety net that truly works when it matters most.
+          </p>
+          
+          <div style={{ borderTop: '2px solid #f0f0f0', borderBottom: '2px solid #f0f0f0', padding: '32px 0', display: 'inline-block', width: '100%' }}>
+            <h3 style={{ fontSize: '1.8rem', color: '#333333', fontWeight: 600, margin: '0 0 8px 0' }}>We are not just insurance.</h3>
+            <h3 style={{ fontSize: '2.2rem', color: '#00678a', fontWeight: 800, margin: 0 }}>We are income security, reimagined.</h3>
+          </div>
+        </div>
+        
         {/* The Problem Solved Section */}
         <div style={{ maxWidth: '1100px', display: 'flex', gap: '60px', alignItems: 'center', marginBottom: '100px' }}>
           <div style={{ flex: 1, position: 'relative' }}>
