@@ -12,6 +12,151 @@ const MOCK_ZONES = [
   { id: 'z3', name: 'East Industrial', risk: 'Critical', aqi: 310, weather: 'Smog' }
 ];
 
+// AI-Powered Dynamic Policy Catalog
+const POLICY_CATALOG = [
+  {
+    id: 'shield-micro',
+    name: 'Aegis Micro Shield',
+    tagline: 'Entry-level parametric cover for low-risk zones',
+    basePrice: 22,
+    coverage: 800,
+    tier: 'Base',
+    color: '#64748b',
+    accentColor: 'rgba(100,116,139,0.1)',
+    badge: null,
+    coverageHours: 8,
+    triggers: ['Heavy Rain (>15mm/hr)', 'Extreme Heat (>43°C)'],
+    perks: ['Claim processed in 48h', 'Resilience Wallet (15% of premium)', 'Basic UPI Payout'],
+    pricingFactors: {
+      expectedLossBase: 0.008, lambda: 0.08, gamma: 3, rScoreBeta: 0.3, pFloorPct: 0.004
+    }
+  },
+  {
+    id: 'shield-base',
+    name: 'Aegis Shield Base',
+    tagline: 'Standard weekly floor for regular gig workers',
+    basePrice: 30,
+    coverage: 1500,
+    tier: 'Base',
+    color: '#3b82f6',
+    accentColor: 'rgba(59,130,246,0.1)',
+    badge: null,
+    coverageHours: 10,
+    triggers: ['Heavy Rain (>20mm/hr)', 'Extreme Heat (>42°C)', 'Poor AQI (>280)'],
+    perks: ['Claim processed in 24h', 'Resilience Wallet (18% of premium)', 'Safe Zone Yield Bonus'],
+    pricingFactors: {
+      expectedLossBase: 0.01, lambda: 0.1, gamma: 5, rScoreBeta: 0.4, pFloorPct: 0.005
+    }
+  },
+  {
+    id: 'shield-pro',
+    name: 'Aegis Shield Pro',
+    tagline: 'Expanded triggers including civic disruptions',
+    basePrice: 48,
+    coverage: 3000,
+    tier: 'Pro',
+    color: '#00678a',
+    accentColor: 'rgba(0,103,138,0.1)',
+    badge: 'Most Popular',
+    coverageHours: 12,
+    triggers: ['Heavy Rain (>15mm/hr)', 'AQI (>250)', 'Civic Strikes', 'Platform Outage'],
+    perks: ['Claim in under 4h', 'Resilience Wallet (20% of premium)', 'Risk Rebate mid-week', 'Safe Zone Nudge Alerts'],
+    pricingFactors: {
+      expectedLossBase: 0.012, lambda: 0.1, gamma: 6, rScoreBeta: 0.5, pFloorPct: 0.0055
+    }
+  },
+  {
+    id: 'shield-elite',
+    name: 'Aegis Elite Resilience',
+    tagline: 'Full multi-trigger protection for high-risk zones',
+    basePrice: 72,
+    coverage: 5000,
+    tier: 'Elite',
+    color: '#7c3aed',
+    accentColor: 'rgba(124,58,237,0.1)',
+    badge: 'High Value',
+    coverageHours: 14,
+    triggers: ['All Weather Events', 'AQI (>200)', 'All Civic Disruptions', 'Platform Crashes', 'Barometric Altitude Shift'],
+    perks: ['Instant Claim (<2h)', 'Resilience Wallet (22% of premium)', 'Predictive Risk Rebate', 'Dynamic Coverage Hour Extension'],
+    pricingFactors: {
+      expectedLossBase: 0.014, lambda: 0.12, gamma: 8, rScoreBeta: 0.65, pFloorPct: 0.006
+    }
+  },
+  {
+    id: 'shield-storm',
+    name: 'Aegis Storm Commander',
+    tagline: 'Maximum protection for monsoon-prone zones',
+    basePrice: 95,
+    coverage: 8000,
+    tier: 'Elite',
+    color: '#0891b2',
+    accentColor: 'rgba(8,145,178,0.1)',
+    badge: 'Premium',
+    coverageHours: 16,
+    triggers: ['All Triggers + Flood Zone Guarantee', 'Syndicate Fraud Zero-Trust', 'UPI Emergency Top-Up'],
+    perks: ['Sub-90 sec UPI Payout', 'Resilience Wallet (25% of premium)', 'Full Risk Rebate', 'Dedicated SOS Line', 'Extended Coverage Hours (weather-adaptive)'],
+    pricingFactors: {
+      expectedLossBase: 0.016, lambda: 0.14, gamma: 10, rScoreBeta: 0.75, pFloorPct: 0.007
+    }
+  },
+  {
+    id: 'shield-guardian',
+    name: 'Aegis Gig Guardian',
+    tagline: 'AI-personalized adaptive plan for veteran riders',
+    basePrice: 55,
+    coverage: 4000,
+    tier: 'Pro',
+    color: '#059669',
+    accentColor: 'rgba(5,150,105,0.1)',
+    badge: 'AI Personalised',
+    coverageHours: 13,
+    triggers: ['Adaptive AI Triggers (zone-specific)', 'Flood + AQI + Strike combo coverage'],
+    perks: ['Real-time adaptive premium', 'Resilience Wallet (20%)', 'Weekly AI Risk Report', 'Free Coverage Week after 4-week streak'],
+    pricingFactors: {
+      expectedLossBase: 0.013, lambda: 0.11, gamma: 7, rScoreBeta: 0.6, pFloorPct: 0.0058
+    }
+  }
+];
+
+// Zone-based historical flood & weather risk data (mock of Guidewire HazardHub + historical DB)
+const ZONE_RISK_PROFILES = {
+  z1: { name: 'Downtown Core', floodIncidents3yr: 18, waterloggingRisk: 'High', riskMultiplier: 1.4, weatherMultiplierThisWeek: 1.2, insight: 'High waterlogging zone. 18 flood events in 3 years. Premium adjusted upward.' },
+  z2: { name: 'North Suburbs', floodIncidents3yr: 0, waterloggingRisk: 'Low', riskMultiplier: 0.85, weatherMultiplierThisWeek: 0.9, insight: 'Your zone has 0 flood incidents in 3 years → you save ₹2–5/week. Clear skies predicted → coverage hours extended.' },
+  z3: { name: 'East Industrial', floodIncidents3yr: 24, waterloggingRisk: 'Critical', riskMultiplier: 1.6, weatherMultiplierThisWeek: 1.4, insight: 'Critical flood-risk industrial zone. Frequent waterlogging. Premium significantly higher this week due to heavy rain forecast.' }
+};
+
+// Dynamic Pricing Engine (mirrors backend formula)
+const computeDynamicPremium = (policy, zoneId, rScore, walletBalance, weeklyRainMm = 10) => {
+  const profile = ZONE_RISK_PROFILES[zoneId] || ZONE_RISK_PROFILES.z1;
+  const { expectedLossBase, lambda, gamma, rScoreBeta, pFloorPct } = policy.pricingFactors;
+  const baseExpectedLoss = policy.coverage * expectedLossBase;
+  const weatherMult = weeklyRainMm > 20 ? 1.35 : weeklyRainMm > 10 ? 1.1 : 0.92;
+  const zoneMult = profile.riskMultiplier;
+  const expectedLoss = baseExpectedLoss * zoneMult * weatherMult;
+  const wCredit = Math.min(walletBalance, policy.coverage * 0.01);
+  const rDiscount = rScore * rScoreBeta;
+  const rawPremium = (expectedLoss * (1 + lambda)) + gamma - rDiscount - wCredit;
+  const pFloor = policy.coverage * pFloorPct;
+  const finalPremium = Math.max(rawPremium, pFloor);
+  const basePremium = (baseExpectedLoss * (1 + lambda)) + gamma; // no zone or behavioural adjustments
+  const savings = Math.max(0, basePremium - finalPremium);
+  // Extended coverage hours if weather safe this week
+  const bonusHours = weatherMult < 1 ? 2 : 0;
+  return {
+    finalPremium: Math.round(finalPremium * 100) / 100,
+    breakdown: {
+      expectedLoss: Math.round(expectedLoss * 100) / 100,
+      zoneMultiplier: zoneMult,
+      weatherMultiplier: weatherMult,
+      rScoreDiscount: Math.round(rDiscount * 100) / 100,
+      walletCredit: Math.round(wCredit * 100) / 100,
+    },
+    savings: Math.round(savings * 100) / 100,
+    bonusCoverageHours: policy.coverageHours + bonusHours,
+    zoneInsight: profile.insight,
+  };
+};
+
 const PREDEFINED_TRIGGERS = [
   { type: 'weather', condition: 'Heavy Rain (>50mm/hr)', icon: <CloudRainWind size={18} /> },
   { type: 'aqi', condition: 'Severe AQI (>300)', icon: <Wind size={18} /> },
@@ -36,9 +181,12 @@ export default function App() {
   const [calculatedPremium, setCalculatedPremium] = useState(0);
   
   const [claims, setClaims] = useState([]);
-  const [riderTab, setRiderTab] = useState('overview'); // overview, claims
-  const [adminTab, setAdminTab] = useState('overview'); // overview, risk, disruptions, claims, fraud, policies, payouts, analytics, loss-ratio, workers, triggers, reports
+  const [riderTab, setRiderTab] = useState('overview');
+  const [adminTab, setAdminTab] = useState('overview');
   const [manualClaim, setManualClaim] = useState({ reason: 'Rain', description: '', amount: '' });
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [activatedPlan, setActivatedPlan] = useState(null);
+  const [showPricingBreakdown, setShowPricingBreakdown] = useState(null); // policy.id or null
 
   const handleManualClaimSubmit = (e) => {
     e.preventDefault();
@@ -926,6 +1074,9 @@ export default function App() {
               <div className={`btn ${riderTab === 'my-policy' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'my-policy' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'my-policy' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'my-policy' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('my-policy')}>
                 <ShieldCheck size={18} /> My Policy
               </div>
+              <div className={`btn ${riderTab === 'explore-plans' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'explore-plans' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'explore-plans' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'explore-plans' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('explore-plans')}>
+                <Sliders size={18} /> Explore Plans
+              </div>
               <div className={`btn ${riderTab === 'file-claim' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'file-claim' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'file-claim' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'file-claim' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('file-claim')}>
                 <ListPlus size={18} /> File a Claim
               </div>
@@ -1097,6 +1248,277 @@ export default function App() {
               </>
             )}
 
+            {riderTab === 'explore-plans' && (() => {
+              const weeklyRain = currentConditions.weather === 'Heavy Rain (>50mm/hr)' ? 55 : 8;
+              const zoneProfile = ZONE_RISK_PROFILES[riderInfo.zone] || ZONE_RISK_PROFILES.z1;
+              return (
+              <>
+                <header style={{ marginBottom: '24px' }}>
+                  <h1 className="animate-slide-up">Explore Plans</h1>
+                  <p style={{ color: 'var(--text-muted)' }}>Your premium is personalised using zone flood history, live weather + your behavioural R-Score.</p>
+                </header>
+
+                {/* Premium Zone + AI pricing insight banner (Light Blue Theme) */}
+                <div className="card animate-slide-up delay-100" style={{ 
+                  marginBottom: '32px', 
+                  background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', 
+                  color: '#0f172a', 
+                  padding: '28px',
+                  borderRadius: '20px',
+                  boxShadow: '0 12px 30px -10px rgba(0, 115, 152, 0.15)',
+                  border: '1px solid #bae6fd',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  {/* Decorative background glow */}
+                  <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px', background: 'radial-gradient(circle, rgba(2,132,199,0.1) 0%, rgba(255,255,255,0) 70%)', borderRadius: '50%' }}></div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '32px', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
+                    {/* Left Icon Area */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: '1 1 200px' }}>
+                      <div style={{ background: 'rgba(255,255,255,0.7)', padding: '16px', borderRadius: '16px', flexShrink: 0, border: '1px solid #bae6fd', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
+                        <BrainCircuit size={28} color="var(--primary)" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', letterSpacing: '1.5px', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>AI Pricing Engine</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>Live Zone Analysis</div>
+                      </div>
+                    </div>
+
+                    {/* Middle: Zone Selector + Insight */}
+                    <div style={{ flex: '2 1 300px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Map size={18} color="var(--primary)" />
+                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>Operating Zone:</span>
+                        <select
+                          value={riderInfo.zone || 'z1'}
+                          onChange={e => setRiderInfo({ ...riderInfo, zone: e.target.value })}
+                          style={{ 
+                            background: '#ffffff', 
+                            border: '1px solid #bae6fd', 
+                            color: '#0f172a', 
+                            borderRadius: '10px', 
+                            padding: '8px 12px', 
+                            fontWeight: 700, 
+                            fontSize: '0.95rem', 
+                            cursor: 'pointer',
+                            outline: 'none',
+                            boxShadow: '0 2px 5px rgba(0,0,0,0.02)'
+                          }}
+                        >
+                          {Object.entries(ZONE_RISK_PROFILES).map(([id, z]) => (
+                            <option key={id} value={id} style={{ color: '#0f172a', background: '#fff' }}>{z.name} ({z.waterloggingRisk} Risk)</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ fontSize: '0.88rem', color: '#334155', lineHeight: '1.5', padding: '10px 14px', background: 'rgba(255,255,255,0.7)', borderRadius: '10px', borderLeft: '3px solid var(--primary)', border: '1px solid #e0f2fe', borderLeftWidth: '3px' }}>
+                        {zoneProfile.insight}
+                      </div>
+                    </div>
+
+                    {/* Right: Quick Stats */}
+                    <div style={{ display: 'flex', gap: '24px', flexShrink: 0, fontSize: '0.82rem', background: '#ffffff', padding: '16px 24px', borderRadius: '16px', border: '1px solid #bae6fd', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: '#64748b', marginBottom: '6px', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Flood Risk</div>
+                        <div style={{ fontWeight: 800, fontSize: '1.3rem', color: zoneProfile.floodIncidents3yr > 10 ? '#dc2626' : '#059669' }}>{zoneProfile.floodIncidents3yr} <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>evts</span></div>
+                      </div>
+                      <div style={{ width: '1px', background: '#e2e8f0' }}></div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: '#64748b', marginBottom: '6px', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>R-Score</div>
+                        <div style={{ fontWeight: 800, fontSize: '1.3rem', color: '#d97706' }}>{rScore}</div>
+                      </div>
+                      <div style={{ width: '1px', background: '#e2e8f0' }}></div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: '#64748b', marginBottom: '6px', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Rain/Wk</div>
+                        <div style={{ fontWeight: 800, fontSize: '1.3rem', color: 'var(--primary)' }}>{weeklyRain}<span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>mm</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Activated confirmation */}
+                {activatedPlan && (
+                  <div style={{ marginBottom: '16px', padding: '14px 20px', background: '#ecfdf5', border: '1px solid #10b981', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <CheckCircle size={20} color="#10b981" />
+                    <span style={{ fontWeight: 700, color: '#059669' }}>✅ <b>{activatedPlan.name}</b> activated! Weekly premium: <b>₹{activatedPlan.premium}/wk</b>. Guidewire policy record created.</span>
+                    <button onClick={() => setActivatedPlan(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+                  </div>
+                )}
+
+                {/* Auto-responsive Grid for Plans */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }} className="animate-slide-up delay-200">
+                  {POLICY_CATALOG.map(policy => {
+                    const pricing = computeDynamicPremium(policy, riderInfo.zone || 'z1', rScore, walletBalance, weeklyRain);
+                    const isSelected = selectedPlan === policy.id;
+                    const isCurrentActive = activatedPlan && activatedPlan.id === policy.id;
+                    const showBreakdown = showPricingBreakdown === policy.id;
+                    return (
+                      <div
+                        key={policy.id}
+                        onClick={() => setSelectedPlan(policy.id)}
+                        style={{
+                          border: isSelected ? `2px solid ${policy.color}` : '1px solid var(--card-border)',
+                          borderRadius: '24px',
+                          background: isSelected ? 'var(--card-bg)' : 'var(--card-bg)',
+                          boxShadow: isSelected ? `0 16px 40px -12px ${policy.color}60` : '0 4px 12px rgba(0,0,0,0.03)',
+                          cursor: 'pointer',
+                          transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                          position: 'relative',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          transform: isSelected ? 'translateY(-4px)' : 'none'
+                        }}
+                      >
+                        {/* Top Accent Line */}
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '6px', background: policy.color }} />
+
+                        {/* Top Badges */}
+                        <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px' }}>
+                          {isCurrentActive && (
+                            <div style={{ background: '#10b981', color: 'white', fontSize: '0.65rem', fontWeight: 800, padding: '4px 10px', borderRadius: '20px', letterSpacing: '0.5px', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}>✅ ACTIVE</div>
+                          )}
+                          {policy.badge && !isCurrentActive && (
+                            <div style={{ background: policy.color, color: 'white', fontSize: '0.65rem', fontWeight: 800, padding: '4px 10px', borderRadius: '20px', letterSpacing: '0.5px' }}>{policy.badge}</div>
+                          )}
+                        </div>
+
+                        {/* Internal Card Content */}
+                        <div style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                          
+                          {/* Header section */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px', marginTop: '4px' }}>
+                            <div style={{ background: policy.accentColor, padding: '12px', borderRadius: '14px', flexShrink: 0 }}>
+                              <Shield size={24} color={policy.color} />
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--text-main)', lineHeight: 1.2 }}>{policy.name}</div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.3 }}>{policy.tagline}</div>
+                            </div>
+                          </div>
+
+                          {/* Dynamic Pricing Info Box */}
+                          <div style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.05)', borderRadius: '16px', padding: '16px', marginBottom: '16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                              <div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>AI Premium</div>
+                                <div style={{ fontSize: '2rem', fontWeight: 800, color: policy.color, lineHeight: 1 }}>₹{pricing.finalPremium}<span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>/wk</span></div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Max Payout</div>
+                                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', lineHeight: 1 }}>₹{policy.coverage.toLocaleString()}</div>
+                              </div>
+                            </div>
+
+                            {/* Savings/Bonus Pills */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {pricing.savings > 0 && (
+                                <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.75rem', color: '#059669', fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><CheckCircle size={14} /> Zone & Behaviour Savings</span>
+                                  <span style={{ fontSize: '0.85rem' }}>-₹{pricing.savings}</span>
+                                </div>
+                              )}
+                              {pricing.bonusCoverageHours > policy.coverageHours && (
+                                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '8px 12px', fontSize: '0.75rem', color: '#2563eb', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <Clock size={14} /> +{pricing.bonusCoverageHours - policy.coverageHours}h bonus coverage (Clear Weather)
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Covered Triggers (Chips) */}
+                          <div style={{ marginBottom: '16px' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Triggers Monitored</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                              {policy.triggers.map((t, i) => (
+                                <span key={i} style={{ background: 'var(--bg-color)', border: '1px solid var(--card-border)', borderRadius: '8px', padding: '4px 10px', fontSize: '0.75rem', color: 'var(--text-main)', fontWeight: 500 }}>{t}</span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Perks List */}
+                          <div style={{ marginBottom: '24px', flex: 1 }}>
+                            {policy.perks.map((p, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '8px', fontWeight: 500 }}>
+                                <CheckCircle size={16} color={policy.color} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                <span>{p}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* AI Breakdown Accordion */}
+                          <div style={{ marginBottom: '16px' }}>
+                            <button
+                              onClick={e => { e.stopPropagation(); setShowPricingBreakdown(showBreakdown ? null : policy.id); }}
+                              style={{ width: '100%', background: showBreakdown ? 'var(--bg-color)' : 'transparent', border: `1px solid ${policy.color}30`, color: policy.color, borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.2s' }}
+                            >
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><BrainCircuit size={16} /> AI Pricing Breakdown</span>
+                              <span>{showBreakdown ? '▲' : '▼'}</span>
+                            </button>
+
+                            {/* Expanded Breakdown */}
+                            {showBreakdown && (
+                              <div className="animate-slide-up" style={{ background: 'var(--bg-color)', border: '1px solid var(--card-border)', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '16px', fontSize: '0.8rem', marginTop: '-4px', position: 'relative', zIndex: 0 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: 'var(--text-main)', fontWeight: 500 }}>
+                                  <span>📍 HazardHub Zone multiplier</span>
+                                  <span style={{ fontWeight: 800, color: pricing.breakdown.zoneMultiplier > 1 ? '#ef4444' : '#10b981' }}>{pricing.breakdown.zoneMultiplier}×</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: 'var(--text-main)', fontWeight: 500 }}>
+                                  <span>🌧️ 7-Day Weather multiplier</span>
+                                  <span style={{ fontWeight: 800, color: pricing.breakdown.weatherMultiplier > 1 ? '#f59e0b' : '#10b981' }}>{pricing.breakdown.weatherMultiplier}×</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: 'var(--text-main)', fontWeight: 500 }}>
+                                  <span>🏆 R-Score behavioural reward</span>
+                                  <span style={{ fontWeight: 800, color: '#10b981' }}>-₹{pricing.breakdown.rScoreDiscount}</span>
+                                </div>
+                                {pricing.breakdown.walletCredit > 0 && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)', fontWeight: 500, borderTop: '1px solid var(--card-border)', paddingTop: '8px', marginTop: '4px' }}>
+                                    <span>💰 Resilience Wallet auto-credit</span>
+                                    <span style={{ fontWeight: 800, color: '#10b981' }}>-₹{pricing.breakdown.walletCredit}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* CTA Button */}
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              initiatePolicy();
+                              setActivatedPlan({ id: policy.id, name: policy.name, premium: pricing.finalPremium });
+                              setSelectedPlan(policy.id);
+                            }}
+                            className={isCurrentActive ? '' : 'btn'}
+                            style={{
+                              width: '100%',
+                              padding: '16px',
+                              background: isCurrentActive ? '#10b981' : isSelected ? policy.color : 'transparent',
+                              color: isCurrentActive ? 'white' : isSelected ? 'white' : policy.color,
+                              border: isCurrentActive ? 'none' : isSelected ? 'none' : `2px solid ${policy.color}`,
+                              borderRadius: '12px',
+                              fontWeight: 800,
+                              fontSize: '1rem',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              gap: '8px',
+                              boxShadow: isSelected && !isCurrentActive ? `0 8px 16px ${policy.color}40` : 'none',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            {isCurrentActive ? <><CheckCircle size={20} /> Currently Active Plan</> : isSelected ? `Activate ${policy.name}` : 'Select Plan'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+              );
+            })()}
+
+
             {riderTab === 'file-claim' && (
               <>
                 <header style={{ marginBottom: '32px' }}>
@@ -1216,18 +1638,32 @@ export default function App() {
                   <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Manage how your approved claims are credited to your bank.</p>
                 </header>
 
-                <div className="grid-2 animate-slide-up delay-200" style={{ marginBottom: '32px' }}>
+                <div className="grid-3 animate-slide-up delay-200" style={{ marginBottom: '32px' }}>
+                  {/* Payout Balance */}
                   <div className="card" style={{ background: 'var(--primary)', color: 'white' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
-                      <span style={{ opacity: 0.8 }}>Available Balance</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                      <span style={{ opacity: 0.8 }}>Total Payouts</span>
                       <Landmark size={20} />
                     </div>
-                    <h1 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>₹{walletBalance.toFixed(2)}</h1>
-                    <p style={{ fontSize: '0.9rem', opacity: 0.9 }}>Available for withdrawal instantly via UPI</p>
+                    <h1 style={{ fontSize: '2.4rem', marginBottom: '8px' }}>₹{claims.reduce((acc, curr) => !curr.status.includes('Pending') ? acc + Number(curr.amount || 0) : acc, 0).toFixed(2)}</h1>
+                    <p style={{ fontSize: '0.85rem', opacity: 0.9 }}>Earnings from parametric claims</p>
 
-                    <button className="btn" style={{ background: 'white', color: 'var(--primary)', width: '100%', marginTop: '24px', fontWeight: 600 }}>
+                    <button className="btn" style={{ background: 'white', color: 'var(--primary)', width: '100%', marginTop: 'auto', fontWeight: 600 }}>
                       Withdraw to Bank
                     </button>
+                  </div>
+
+                  {/* Resilience Wallet (Micro-Savings) */}
+                  <div className="card" style={{ background: 'linear-gradient(135deg, #FFC72C 0%, #d97706 100%)', color: '#003366', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <span style={{ opacity: 0.9, fontWeight: 700 }}>Resilience Wallet</span>
+                      <ShieldCheck size={20} color="#003366" />
+                    </div>
+                    <h1 style={{ fontSize: '2.4rem', marginBottom: '4px', fontWeight: 800 }}>₹{walletBalance.toFixed(2)}</h1>
+                    <div style={{ background: 'rgba(0,51,102,0.1)', padding: '4px 10px', borderRadius: '12px', display: 'inline-flex', fontSize: '0.75rem', fontWeight: 700, marginBottom: '12px', alignSelf: 'flex-start', color: '#003366' }}>Micro-Savings</div>
+                    <p style={{ fontSize: '0.85rem', opacity: 0.9, flex: 1, fontWeight: 500 }}>
+                      Generated from a portion of your premiums. Maintain a claim-free streak to unlock a <strong>"Free Coverage Week"</strong>!
+                    </p>
                   </div>
 
                   <div className="card glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -2020,42 +2456,125 @@ export default function App() {
 
           {adminTab === 'policies' && (
             <>
-              <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Policy Management</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Configure weekly insurance plans and parametric limits.</p>
+              <header style={{ marginBottom: '24px' }}>
+                <h1 className="animate-slide-up">Policy Catalog Management</h1>
+                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Configure AI-powered dynamic pricing factors, coverage limits, and parametric triggers for each plan.</p>
               </header>
-              <div className="grid-3 animate-slide-up delay-200">
-                <div className="card glass-panel">
-                  <h3>Basic Plan</h3>
-                  <h2 style={{ margin: '16px 0', color: 'var(--primary)' }}>₹25 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ week</span></h2>
-                  <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                    <li>Max Payout: ₹800</li>
-                    <li>Rain & Heat Only</li>
-                    <li>48h Claim Processing</li>
-                  </ul>
-                  <button className="btn btn-outline" style={{ width: '100%' }}>Edit Plan</button>
+
+              {/* Pricing Model Summary Banner */}
+              <div className="card animate-slide-up delay-200" style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', color: 'white', marginBottom: '28px' }}>
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
+                  <BrainCircuit size={28} color="#FFC72C" />
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>AI Dynamic Pricing Formula</div>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>The pricing engine runs every Sunday at 23:59 for all active workers</div>
+                  </div>
                 </div>
-                <div className="card glass-panel" style={{ border: '1px solid var(--accent-green)' }}>
-                  <span className="badge badge-green" style={{ float: 'right' }}>Most Popular</span>
-                  <h3>Standard Plan</h3>
-                  <h2 style={{ margin: '16px 0', color: 'var(--primary)' }}>₹40 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ week</span></h2>
-                  <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                    <li>Max Payout: ₹1,500</li>
-                    <li>All Weather Triggers</li>
-                    <li>2h Claim Processing</li>
-                  </ul>
-                  <button className="btn btn-primary" style={{ width: '100%' }}>Edit Plan</button>
+                <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px', fontFamily: 'monospace', fontSize: '0.9rem', color: '#38bdf8', letterSpacing: '0.5px' }}>
+                  Pw = max( [E(L) × ZoneMult × WeatherMult × (1 + λ)] + γ - (R_score × β) - W_credit , P_floor )
                 </div>
-                <div className="card glass-panel">
-                  <h3>Premium Plan</h3>
-                  <h2 style={{ margin: '16px 0', color: 'var(--primary)' }}>₹85 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ week</span></h2>
-                  <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                    <li>Max Payout: ₹3,500</li>
-                    <li>All Triggers + Strikes</li>
-                    <li>Instant Payouts</li>
-                  </ul>
-                  <button className="btn btn-outline" style={{ width: '100%' }}>Edit Plan</button>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginTop: '16px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>E(L)</span> = Expected Loss (Coverage × base%)</div>
+                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>ZoneMult</span> = HazardHub flood history (0.85–1.6×)</div>
+                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>WeatherMult</span> = OpenWeatherMap 7-day forecast (0.92–1.35×)</div>
+                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>R_score × β</span> = Behavioral safety discount</div>
                 </div>
+              </div>
+
+              {/* Zone Risk Profiles */}
+              <div style={{ marginBottom: '28px' }} className="animate-slide-up delay-300">
+                <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}><Map size={20} color="var(--primary)" /> Zone Hyper-Local Risk Profiles (HazardHub)</h3>
+                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '1px solid var(--card-border)' }}>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Zone</th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Waterlogging Risk</th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Flood Incidents (3yr)</th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Risk Multiplier</th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Worker Insight</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.values(ZONE_RISK_PROFILES).map((z, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--card-border)' }}>
+                          <td style={{ padding: '14px 20px', fontWeight: 600 }}>{z.name}</td>
+                          <td style={{ padding: '14px 20px' }}>
+                            <span className={`badge ${z.waterloggingRisk === 'Critical' ? 'badge-red' : z.waterloggingRisk === 'High' ? 'badge-orange' : 'badge-green'}`}>{z.waterloggingRisk}</span>
+                          </td>
+                          <td style={{ padding: '14px 20px', fontWeight: 700, color: z.floodIncidents3yr > 10 ? 'var(--accent-red)' : z.floodIncidents3yr === 0 ? 'var(--accent-green)' : 'var(--accent-orange)' }}>{z.floodIncidents3yr}</td>
+                          <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontWeight: 600 }}>{z.riskMultiplier}×</td>
+                          <td style={{ padding: '14px 20px', fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: '300px' }}>{z.insight}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Policy Catalog Cards */}
+              <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }} className="animate-slide-up delay-300"><ShieldCheck size={20} color="var(--primary)" /> Policy Catalog ({POLICY_CATALOG.length} Plans)</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px' }} className="animate-slide-up delay-300">
+                {POLICY_CATALOG.map(policy => {
+                  const samplePricing = computeDynamicPremium(policy, 'z1', 90, 0, 25);
+                  return (
+                    <div key={policy.id} className="card" style={{ borderTop: `4px solid ${policy.color}`, position: 'relative' }}>
+                      {policy.badge && (
+                        <div style={{ position: 'absolute', top: '16px', right: '16px', background: policy.color, color: 'white', fontSize: '0.7rem', fontWeight: 700, padding: '3px 10px', borderRadius: '12px' }}>{policy.badge}</div>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                        <div style={{ background: policy.accentColor, padding: '10px', borderRadius: '10px' }}><Shield size={22} color={policy.color} /></div>
+                        <div>
+                          <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>{policy.name}</div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{policy.tagline}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Base Price</div>
+                          <div style={{ fontWeight: 700, fontSize: '1.2rem', color: policy.color }}>₹{policy.basePrice}/wk</div>
+                        </div>
+                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Max Coverage</div>
+                          <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>₹{policy.coverage.toLocaleString()}</div>
+                        </div>
+                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Coverage Hours</div>
+                          <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>{policy.coverageHours}h/day</div>
+                        </div>
+                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sample Price (High-Risk Zone)</div>
+                          <div style={{ fontWeight: 700, fontSize: '1.2rem', color: '#ef4444' }}>₹{samplePricing.finalPremium}/wk</div>
+                        </div>
+                      </div>
+
+                      {/* Pricing Factors */}
+                      <div style={{ background: 'rgba(0,0,0,0.02)', borderRadius: '10px', padding: '12px', marginBottom: '14px', fontSize: '0.78rem' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>AI Pricing Parameters</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', color: 'var(--text-muted)' }}>
+                          <span>E(L) base: <b style={{ color: 'var(--text-main)' }}>{(policy.pricingFactors.expectedLossBase * 100).toFixed(1)}%</b></span>
+                          <span>λ (risk margin): <b style={{ color: 'var(--text-main)' }}>{(policy.pricingFactors.lambda * 100).toFixed(0)}%</b></span>
+                          <span>γ (OpEx): <b style={{ color: 'var(--text-main)' }}>₹{policy.pricingFactors.gamma}</b></span>
+                          <span>R-score β: <b style={{ color: 'var(--text-main)' }}>{policy.pricingFactors.rScoreBeta}</b></span>
+                        </div>
+                      </div>
+
+                      {/* Triggers */}
+                      <div style={{ marginBottom: '14px' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>Parametric Triggers</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                          {policy.triggers.map((t, i) => <span key={i} style={{ background: policy.accentColor, color: policy.color, border: `1px solid ${policy.color}30`, borderRadius: '6px', padding: '2px 8px', fontSize: '0.72rem', fontWeight: 600 }}>{t}</span>)}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <button className="btn btn-outline" style={{ flex: 1, fontSize: '0.85rem' }}>Edit Pricing Factors</button>
+                        <button className="btn" style={{ flex: 1, background: policy.color, color: 'white', border: 'none', fontSize: '0.85rem' }}>Toggle Active</button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
