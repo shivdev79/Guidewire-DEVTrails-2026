@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { motion } from 'framer-motion';
 import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase } from 'lucide-react';
 import ControlCenter from './ControlCenter';
 
@@ -287,54 +288,85 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right Column (Login / Intake Form) */}
-          <div style={{ flex: 0.8 }}>
-            <div className="card" style={{ background: '#ffffff', color: '#333333', padding: '40px', borderRadius: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', border: 'none' }}>
-              
-              <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-                <div style={{ display: 'inline-flex', padding: '16px', background: 'rgba(0, 103, 138, 0.1)', borderRadius: '50%', marginBottom: '16px' }}>
-                  <Shield size={40} color="#00678a" />
-                </div>
-                <h3 style={{ margin: 0, color: '#00678a', fontSize: '1.6rem', fontWeight: 800 }}>AEGIS PORTAL</h3>
-                <p style={{ color: '#666666', fontFamily: '"Poppins", sans-serif', fontSize: '0.95rem', marginTop: '8px' }}>Select your access level</p>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <button
-                  className="btn"
-                  style={{ width: '100%', padding: '18px', fontSize: '1.05rem', background: '#FFC72C', color: '#00678a', borderRadius: '8px', fontWeight: 800, border: 'none', boxShadow: '0 4px 14px rgba(255, 199, 44, 0.4)' }}
-                  onClick={() => setCurrentView('onboarding')}
-                >
-                  Login as Rider / Register
-                </button>
+          {/* Right Column (Mobile Login Mockup) */}
+          <div style={{ flex: 0.8, display: 'flex', justifyContent: 'center' }}>
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.8 }} style={{ width: '340px', height: '620px', background: '#1c1c1c', borderRadius: '48px', padding: '12px', boxShadow: '0 40px 80px rgba(0,0,0,0.5), inset 0 0 12px rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.15)', position: 'relative' }}>
+              {/* Inner Screen */}
+              <div style={{ width: '100%', height: '100%', background: '#fff', borderRadius: '36px', overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
                 
-                <div style={{ position: 'relative', margin: '16px 0', display: 'flex', alignItems: 'center' }}>
-                  <div style={{ flex: 1, borderTop: '1px solid #e0e0e0' }}></div>
-                  <span style={{ padding: '0 12px', color: '#999999', fontSize: '0.85rem', fontWeight: 700 }}>OR</span>
-                  <div style={{ flex: 1, borderTop: '1px solid #e0e0e0' }}></div>
+                {/* Status Bar / Dynamic Island */}
+                <div style={{ position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)', width: '90px', height: '26px', background: '#000', borderRadius: '20px', zIndex: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#18181b', border: '1px solid #333' }}></div>
                 </div>
 
-                <button
-                  className="btn"
-                  style={{ width: '100%', padding: '18px', fontSize: '1.05rem', background: '#ffffff', color: '#00678a', border: '2px solid #00678a', borderRadius: '8px', fontWeight: 700 }}
-                  onClick={() => setCurrentView('admin-dash')}
-                >
-                  Login as Insurer
-                </button>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#ffffff', position: 'relative' }}>
+                  {/* Top Insurance Graphic */}
+                  <div style={{ background: 'linear-gradient(135deg, #00678a, #004b66)', height: '250px', padding: '60px 24px 20px', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderBottomLeftRadius: '32px', borderBottomRightRadius: '32px', boxShadow: '0 10px 20px rgba(0,103,138,0.15)', position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: '-10px', right: '-20px', opacity: 0.1 }}>
+                      <Shield size={180} />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', zIndex: 1 }}>
+                      <Shield size={32} color="#FFC72C" />
+                      <div style={{ fontSize: '1.2rem', fontWeight: 800, letterSpacing: '1px' }}>AEGIS PORTAL</div>
+                    </div>
+                    <div style={{ zIndex: 1 }}>
+                      <div style={{ fontSize: '1.6rem', fontWeight: 800, lineHeight: 1.2, fontFamily: '"Montserrat", sans-serif' }}>Your Income.<br/>Protected.</div>
+                      <div style={{ fontSize: '0.85rem', color: '#e0f2fe', marginTop: '8px', fontFamily: '"Poppins", sans-serif' }}>Select terminal access level</div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div style={{ padding: '32px 24px', display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
+                    <motion.button
+                      whileHover={{ scale: 1.02, boxShadow: '0 10px 25px rgba(255, 199, 44, 0.4)' }}
+                      whileTap={{ scale: 0.98 }}
+                      style={{ width: '100%', padding: '16px', fontSize: '1.05rem', background: '#FFC72C', color: '#00678a', borderRadius: '16px', fontWeight: 800, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                      onClick={() => setCurrentView('onboarding')}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <User size={20} />
+                        <span>Partner • Rider</span>
+                      </div>
+                      <ArrowRightLeft size={18} />
+                    </motion.button>
+
+                    <div style={{ position: 'relative', margin: '6px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ flex: 1, borderTop: '1px solid #eee' }}></div>
+                      <span style={{ padding: '0 12px', color: '#aaa', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '1px' }}>OR</span>
+                      <div style={{ flex: 1, borderTop: '1px solid #eee' }}></div>
+                    </div>
+
+                    <motion.button
+                      whileHover={{ scale: 1.02, boxShadow: '0 10px 25px rgba(0, 103, 138, 0.15)' }}
+                      whileTap={{ scale: 0.98 }}
+                      style={{ width: '100%', padding: '16px', fontSize: '1.05rem', background: '#f8fbfc', color: '#00678a', border: '2px solid rgba(0,103,138,0.2)', borderRadius: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                      onClick={() => setCurrentView('admin-dash')}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <Briefcase size={20} />
+                        <span>Insurer Login</span>
+                      </div>
+                      <ShieldCheck size={18} />
+                    </motion.button>
+                  </div>
+
+                  {/* Trust Badges */}
+                  <div style={{ padding: '24px', background: '#f9fafb', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ background: '#ecfdf5', padding: '6px', borderRadius: '8px' }}><CheckCircle size={16} color="#10b981" /></div>
+                      <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, fontFamily: '"Poppins", sans-serif' }}>Play Integrity Secured</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ background: '#eff6ff', padding: '8px', borderRadius: '8px' }}><Activity size={16} color="#3b82f6" /></div>
+                      <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, fontFamily: '"Poppins", sans-serif' }}>Guidewire ClaimCenter Synced</span>
+                    </div>
+                  </div>
+
+                  {/* Home Indicator */}
+                  <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', width: '35%', height: '4px', background: '#ddd', borderRadius: '2px' }}></div>
+                </div>
               </div>
-
-              <div style={{ marginTop: '24px', padding: '16px', background: '#f5f7fa', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                  <CheckCircle size={18} color="#00678a" />
-                  <span style={{ fontSize: '0.9rem', color: '#555555', fontFamily: '"Poppins", sans-serif', fontWeight: 500 }}>Play Integrity Secured</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <CheckCircle size={18} color="#00678a" />
-                  <span style={{ fontSize: '0.9rem', color: '#555555', fontFamily: '"Poppins", sans-serif', fontWeight: 500 }}>Guidewire ClaimCenter Synced</span>
-                </div>
-              </div>
-
-            </div>
+            </motion.div>
           </div>
 
         </div>
@@ -343,6 +375,195 @@ export default function App() {
       {/* Layout Content */}
       <div style={{ background: '#ffffff', borderRadius: '40px 40px 0 0', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#333333' }}>
         
+        {/* Experience on the Go Section */}
+        <div style={{ width: '100%', maxWidth: '1250px', margin: '40px auto 140px auto', position: 'relative' }}>
+          {/* Modern Glow Background */}
+          <div style={{ position: 'absolute', top: '-10%', left: '-5%', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(0,103,138,0.06) 0%, transparent 70%)', filter: 'blur(50px)', zIndex: 0 }}></div>
+          <div style={{ position: 'absolute', bottom: '-10%', right: '-5%', width: '500px', height: '500px', background: 'radial-gradient(circle, rgba(0,103,138,0.08) 0%, transparent 70%)', filter: 'blur(50px)', zIndex: 0 }}></div>
+          
+          <div style={{ background: 'linear-gradient(145deg, rgba(255,255,255,1) 0%, rgba(244,250,253,0.9) 100%)', borderRadius: '48px', display: 'flex', overflow: 'hidden', boxShadow: '0 30px 80px rgba(0, 103, 138, 0.1)', position: 'relative', zIndex: 1, border: '1px solid rgba(255,255,255,0.8)', backdropFilter: 'blur(20px)' }}>
+            
+            {/* Left Side */}
+            <div style={{ flex: 1.1, padding: '80px 60px', color: '#00678a', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} viewport={{ once: true }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(0,103,138,0.08)', padding: '8px 16px', borderRadius: '20px', marginBottom: '24px', border: '1px solid rgba(0,103,138,0.1)' }}>
+                   <Zap size={16} color="#00678a" />
+                   <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '1px', color: '#00678a' }}>SEAMLESS PROTECTION</span>
+                </div>
+              </motion.div>
+              
+              <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }} viewport={{ once: true }} style={{ fontSize: '3.4rem', fontWeight: 800, lineHeight: 1.15, marginBottom: '24px', background: 'linear-gradient(to right, #00678a, #004b66)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', textShadow: '0 4px 20px rgba(0,103,138,0.08)' }}>
+                Zero-touch parametric engine on your phone.
+              </motion.h2>
+              
+              <motion.p initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }} viewport={{ once: true }} style={{ fontSize: '1.15rem', color: '#555', fontFamily: '"Poppins", sans-serif', lineHeight: 1.7, marginBottom: '40px' }}>
+                Aegis turns your device into an intelligent risk shield. Activate policies, monitor live micro-climate disruptions, and receive instant automated payouts—all without filing paperwork.
+              </motion.p>
+
+              {/* Interactive Benefit Cards */}
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.3 }} viewport={{ once: true }} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '48px' }}>
+                 <motion.div whileHover={{ y: -5, boxShadow: '0 15px 30px rgba(0,103,138,0.1)' }} style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,103,138,0.06)', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', transition: 'all 0.3s ease' }}>
+                    <div style={{ background: 'rgba(0,103,138,0.06)', padding: '12px', borderRadius: '16px' }}><Activity size={24} color="#00678a" /></div>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#333' }}>Risk prediction via<br/>hybrid AI</span>
+                 </motion.div>
+                 <motion.div whileHover={{ y: -5, boxShadow: '0 15px 30px rgba(0,103,138,0.1)' }} style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,103,138,0.06)', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', transition: 'all 0.3s ease' }}>
+                    <div style={{ background: 'rgba(0,103,138,0.06)', padding: '12px', borderRadius: '16px' }}><ShieldCheck size={24} color="#00678a" /></div>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#333' }}>Automated trigger<br/>validation</span>
+                 </motion.div>
+                 <motion.div whileHover={{ y: -5, boxShadow: '0 15px 30px rgba(0,103,138,0.1)' }} style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,103,138,0.06)', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', transition: 'all 0.3s ease' }}>
+                    <div style={{ background: 'rgba(0,103,138,0.06)', padding: '12px', borderRadius: '16px' }}><Map size={24} color="#00678a" /></div>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#333' }}>Real-time trajectory<br/>tracking</span>
+                 </motion.div>
+                 <motion.div whileHover={{ y: -5, boxShadow: '0 15px 30px rgba(0,103,138,0.1)' }} style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,103,138,0.06)', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', transition: 'all 0.3s ease' }}>
+                    <div style={{ background: 'rgba(255,199,44,0.15)', padding: '12px', borderRadius: '16px' }}><Wallet size={24} color="#00678a" /></div>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#333' }}>Automated Resilience<br/>Wallet</span>
+                 </motion.div>
+              </motion.div>
+
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.4 }} viewport={{ once: true }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '16px', color: '#00678a', letterSpacing: '0.5px' }}>GET SECURED NOW</h4>
+                <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                  {/* Quick Download QR Wrapper */}
+                  <div style={{ background: 'white', padding: '12px', borderRadius: '16px', display: 'flex', gap: '20px', alignItems: 'center', border: '1px solid rgba(0,103,138,0.1)', boxShadow: '0 4px 20px rgba(0,103,138,0.05)' }}>
+                    <div style={{ width: '70px', height: '70px', background: '#f8f9fa', padding: '6px', borderRadius: '10px', display: 'flex', flexWrap: 'wrap', gap: '2px', border: '1px solid #eee' }}>
+                       {Array.from({ length: 25 }).map((_, i) => (
+                         <div key={i} style={{ width: '10px', height: '10px', background: (i % 2 === 0 || i % 5 === 0) ? '#00678a' : 'transparent', borderRadius: '2px' }}></div>
+                       ))}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '10px' }}>
+                       <motion.img whileHover={{ scale: 1.05 }} src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Google Play" style={{ height: '36px', cursor: 'pointer' }} />
+                       <motion.img whileHover={{ scale: 1.05 }} src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="App Store" style={{ height: '36px', cursor: 'pointer' }} />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Right Side - Creative 3D Phone Mockup */}
+            <div style={{ flex: 0.9, position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'radial-gradient(circle at center, rgba(0,103,138,0.06) 0%, transparent 70%)', minHeight: '700px' }}>
+              
+              {/* Abstract Circular Behind Phone */}
+              <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 40, ease: "linear" }} style={{ position: 'absolute', width: '480px', height: '480px', border: '2px dashed rgba(0,103,138,0.15)', borderRadius: '50%', background: 'conic-gradient(from 0deg, transparent 0%, rgba(0,103,138,0.05) 25%, transparent 50%)', zIndex: 0 }}></motion.div>
+              <div style={{ position: 'absolute', width: '380px', height: '380px', border: '1px solid rgba(0,103,138,0.1)', borderRadius: '50%', zIndex: 0 }}></div>
+
+              {/* Floating Card 1: Payout */}
+              <motion.div initial={{ opacity: 0, x: 50, y: -20 }} whileInView={{ opacity: 1, x: 0, y: 0 }} transition={{ duration: 0.8, delay: 0.6 }} viewport={{ once: true }} 
+                 whileHover={{ scale: 1.05 }}
+                 style={{ position: 'absolute', top: '22%', right: '-15px', background: 'white', padding: '16px 20px', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,103,138,0.15)', zIndex: 3, display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid rgba(0,103,138,0.05)', cursor: 'pointer' }}>
+                <div style={{ background: '#ecfdf5', padding: '10px', borderRadius: '12px' }}><CheckCircle size={24} color="#10b981" /></div>
+                <div>
+                   <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: 600 }}>Payout Initiated</div>
+                   <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#333' }}>+ ₹1,500 <span style={{fontSize: '0.8rem', fontWeight: 500}}>UPI</span></div>
+                </div>
+              </motion.div>
+
+              {/* Floating Card 2: Risk Alert */}
+              <motion.div initial={{ opacity: 0, x: -50, y: 20 }} whileInView={{ opacity: 1, x: 0, y: 0 }} transition={{ duration: 0.8, delay: 0.8 }} viewport={{ once: true }} 
+                 whileHover={{ scale: 1.05 }}
+                 style={{ position: 'absolute', bottom: '22%', left: '10px', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(20px)', padding: '16px 20px', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,103,138,0.15)', zIndex: 3, display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid rgba(0,103,138,0.05)', cursor: 'pointer' }}>
+                <div style={{ background: '#fef2f2', padding: '10px', borderRadius: '12px' }}><AlertTriangle size={24} color="#ef4444" /></div>
+                <div>
+                   <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: 600 }}>Risk Detected</div>
+                   <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#333' }}>Heavy Rain Sector 4</div>
+                </div>
+              </motion.div>
+
+              {/* Phone Frame wrapper with float animation */}
+              <motion.div animate={{ y: [0, -15, 0] }} transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }} style={{ position: 'relative', zIndex: 1, transform: 'rotate(5deg)' }}>
+                <div style={{ width: '310px', height: '630px', background: '#111', borderRadius: '48px', padding: '10px', boxShadow: '0 30px 60px rgba(0,0,0,0.25), inset 0 0 10px rgba(255,255,255,0.4)', border: '2px solid rgba(255,255,255,0.2)' }}>
+                  {/* Inner Screen */}
+                  <div style={{ width: '100%', height: '100%', background: '#fff', borderRadius: '38px', overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                     {/* Dynamic Island */}
+                     <div style={{ position: 'absolute', top: '8px', left: '50%', transform: 'translateX(-50%)', width: '100px', height: '28px', background: '#000', borderRadius: '20px', zIndex: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                       <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#111', border: '1px solid #333' }}></div>
+                     </div>
+
+                     {/* App Topbar */}
+                     <div style={{ background: '#fdfdfd', padding: '50px 20px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                         <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #00678a, #003366)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,103,138,0.2)' }}>
+                           <User size={20} color="white" />
+                         </div>
+                         <div>
+                           <div style={{ fontSize: '0.8rem', color: '#666', fontFamily: '"Poppins", sans-serif' }}>Partner Portal</div>
+                           <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#333' }}>Live Status</div>
+                         </div>
+                       </div>
+                       <div style={{ position: 'relative', background: '#f0f4f8', padding: '8px', borderRadius: '50%' }}>
+                         <Bell size={20} color="#00678a" />
+                         <div style={{ position: 'absolute', top: '8px', right: '8px', width: '8px', height: '8px', background: '#ff3b30', borderRadius: '50%', border: '2px solid white' }}></div>
+                       </div>
+                     </div>
+
+                     {/* App Content */}
+                     <div style={{ padding: '20px', background: '#f8f9fa', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        
+                        {/* Active Coverage Glowing Card */}
+                        <div style={{ background: 'linear-gradient(135deg, #00678a 0%, #004b66 100%)', borderRadius: '24px', padding: '24px', color: 'white', boxShadow: '0 12px 30px rgba(0, 103, 138, 0.3)', position: 'relative', overflow: 'hidden' }}>
+                          <motion.div animate={{ scale: [1, 1.1, 1], opacity: [0.1, 0.15, 0.1] }} transition={{ repeat: Infinity, duration: 4 }} style={{ position: 'absolute', right: '-20px', bottom: '-20px' }}>
+                            <ShieldCheck size={140} />
+                          </motion.div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', position: 'relative' }}>
+                             <div style={{ padding: '6px', background: 'rgba(255,255,255,0.15)', borderRadius: '10px' }}>
+                               <ShieldCheck size={20} color="#FFC72C" />
+                             </div>
+                             <span style={{ fontWeight: 600, fontSize: '0.9rem', letterSpacing: '0.5px' }}>ACTIVE COVERAGE</span>
+                          </div>
+                          <div style={{ fontSize: '0.8rem', opacity: 0.9, marginBottom: '2px', position: 'relative' }}>Current Weekly Floor</div>
+                          <div style={{ fontSize: '2.2rem', fontWeight: 800, marginBottom: '20px', letterSpacing: '-0.5px', position: 'relative' }}>₹8,000</div>
+                          <button style={{ background: '#FFC72C', color: '#00678a', border: 'none', padding: '12px 16px', borderRadius: '14px', fontSize: '0.9rem', fontWeight: 800, width: '100%', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', position: 'relative' }}>Renew Policy</button>
+                        </div>
+
+                        <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#333', marginTop: '4px' }}>Essentials</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                           <div style={{ background: 'white', padding: '14px 8px', borderRadius: '18px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ background: '#eff6ff', padding: '12px', borderRadius: '14px' }}><Upload size={20} color="#3b82f6" /></div>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#444' }}>Claim</div>
+                           </div>
+                           <div style={{ background: 'white', padding: '14px 8px', borderRadius: '18px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ background: '#fffbeb', padding: '12px', borderRadius: '14px' }}><Wallet size={20} color="#d97706" /></div>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#444' }}>Wallet</div>
+                           </div>
+                           <div style={{ background: 'white', padding: '14px 8px', borderRadius: '18px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '14px' }}><Map size={20} color="#10b981" /></div>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#444' }}>Zones</div>
+                           </div>
+                        </div>
+
+                        <div style={{ background: 'white', padding: '16px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '14px', marginTop: '4px' }}>
+                           <div style={{ background: '#fef2f2', padding: '12px', borderRadius: '14px' }}>
+                             <CloudRainWind size={22} color="#ef4444" />
+                           </div>
+                           <div>
+                              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#333' }}>Heavy Rain Forecast</div>
+                              <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '2px', fontWeight: 500 }}>Severe • Next 2 hours</div>
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* App Bottom Navbar */}
+                     <div style={{ background: 'white', padding: '16px 20px 24px 20px', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f0f0f0' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#00678a' }}>
+                          <Activity size={22} /><span style={{ fontSize: '0.65rem', fontWeight: 800 }}>Home</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#ccc' }}>
+                          <ShieldCheck size={22} /><span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Policies</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#ccc' }}>
+                          <Wallet size={22} /><span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Wallet</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#ccc' }}>
+                          <User size={22} /><span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Profile</span>
+                        </div>
+                     </div>
+                     {/* Home Indicator */}
+                     <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', width: '35%', height: '4px', background: '#ccc', borderRadius: '2px' }}></div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </div>
         {/* Why Choose AEGIS Section */}
         <div style={{ maxWidth: '1000px', width: '100%', marginBottom: '100px', textAlign: 'center' }}>
           <div style={{ color: '#FFC72C', fontWeight: 800, letterSpacing: '1px', marginBottom: '16px' }}>WHY CHOOSE AEGIS?</div>
@@ -465,13 +686,13 @@ export default function App() {
               </div>
               <h3 style={{ fontSize: '1.3rem', color: '#00678a', marginBottom: '12px', fontWeight: 800 }}>Instant UPI Settlements</h3>
               <p style={{ color: '#666666', fontFamily: '"Poppins", sans-serif', fontSize: '0.95rem', lineHeight: 1.6 }}>By orchestrating Guidewire ClaimCenter with Razorpay routes, verified claims bypass NEFT delays and hit the worker's bank account in under 90 seconds.</p>
-            </div>
-            
           </div>
         </div>
+
       </div>
     </div>
-  );
+  </div>
+);
 
   const renderOnboarding = () => (
     <div style={{ background: '#f8f9fa', minHeight: '100vh', padding: '40px 20px' }}>
