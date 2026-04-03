@@ -61,6 +61,18 @@ export default function App() {
     }
   }, [currentView]);
 
+  const downloadSQLiteDump = () => {
+    const filename = 'aegis_ledger_dump.json';
+    const jsonStr = JSON.stringify(adminData, null, 2);
+    let element = document.createElement('a');
+    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(jsonStr));
+    element.setAttribute('download', filename);
+    element.style.display = 'none';
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
   const handleManualClaimSubmit = async (e) => {
     e.preventDefault();
     if (!workerId) return;
@@ -2034,10 +2046,10 @@ export default function App() {
                 <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Statistics and demographics about insured delivery workers.</p>
               </header>
               <div className="grid-4">
-                <div className="card"><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Total Insured</div><h2 style={{ marginTop: '8px' }}>24,910</h2></div>
-                <div className="card" style={{ borderLeft: '4px solid var(--accent-orange)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>High-Risk Workers</div><h2 style={{ marginTop: '8px' }}>1,420</h2></div>
-                <div className="card" style={{ borderLeft: '4px solid var(--accent-red)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Frequent Claimers</div><h2 style={{ marginTop: '8px' }}>85</h2></div>
-                <div className="card" style={{ borderLeft: '4px solid var(--accent-green)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Zero Claim Workers</div><h2 style={{ marginTop: '8px' }}>19,500</h2></div>
+                <div className="card"><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Total Insured</div><h2 style={{ marginTop: '8px' }}>{adminData.workers ? adminData.workers.length.toLocaleString() : 0}</h2></div>
+                <div className="card" style={{ borderLeft: '4px solid var(--accent-orange)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>High-Risk Workers</div><h2 style={{ marginTop: '8px' }}>{adminData.workers ? adminData.workers.filter(w => w.risk_score < 50).length.toLocaleString() : 0}</h2></div>
+                <div className="card" style={{ borderLeft: '4px solid var(--accent-red)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Fraud Flags</div><h2 style={{ marginTop: '8px' }}>{adminData.claims ? adminData.claims.filter(c => c.fraud_score > 50).length.toLocaleString() : 0}</h2></div>
+                <div className="card" style={{ borderLeft: '4px solid var(--accent-green)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Zero Claim Workers</div><h2 style={{ marginTop: '8px' }}>{adminData.workers ? adminData.workers.filter(w => !adminData.claims?.find(c => c.worker_id === w.id)).length.toLocaleString() : 0}</h2></div>
               </div>
             </>
           )}
