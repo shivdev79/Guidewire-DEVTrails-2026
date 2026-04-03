@@ -1939,32 +1939,31 @@ export default function App() {
                 <h1 className="animate-slide-up">Payout Monitoring</h1>
                 <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Track automated transparency and financial outflows.</p>
               </header>
-              <div className="card glass-panel">
+              <div className="table-container card glass-panel">
                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'rgba(0,0,0,0.03)' }}>
-                      <th style={{ padding: '12px' }}>Date</th>
-                      <th style={{ padding: '12px' }}>Cause</th>
+                      <th style={{ padding: '12px' }}>Worker ID</th>
+                      <th style={{ padding: '12px' }}>Disruption Cause</th>
                       <th style={{ padding: '12px' }}>Amount</th>
                       <th style={{ padding: '12px' }}>Bank Ref</th>
                       <th style={{ padding: '12px' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Today, 2:40 PM</td>
-                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Downtown Flood</td>
-                      <td style={{ padding: '12px', fontWeight: 600 }}>₹1,500</td>
-                      <td style={{ padding: '12px', fontFamily: 'monospace' }}>UPI-0092A</td>
-                      <td style={{ padding: '12px' }}><span className="badge badge-green">Success</span></td>
-                    </tr>
-                    <tr style={{ borderTop: '1px solid var(--card-border)' }}>
-                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Today, 1:15 PM</td>
-                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Downtown Flood</td>
-                      <td style={{ padding: '12px', fontWeight: 600 }}>₹1,500</td>
-                      <td style={{ padding: '12px', fontFamily: 'monospace' }}>NEFT-90X</td>
-                      <td style={{ padding: '12px' }}><span className="badge badge-red">Failed</span></td>
-                    </tr>
+                    {adminData.claims && adminData.claims.filter(c => c.status === 'APPROVED').length > 0 ? (
+                       adminData.claims.filter(c => c.status === 'APPROVED').map((claim, idx) => (
+                         <tr key={idx} style={{ borderTop: idx > 0 ? '1px solid var(--card-border)' : 'none' }}>
+                           <td style={{ padding: '12px', fontSize: '0.9rem' }}>WRK-{claim.worker_id}</td>
+                           <td style={{ padding: '12px', fontSize: '0.9rem' }}>{claim.trigger_type}</td>
+                           <td style={{ padding: '12px', fontWeight: 600 }}>₹{claim.payout_amount}</td>
+                           <td style={{ padding: '12px', fontFamily: 'monospace' }}>UPI-AEGIS-{claim.id}</td>
+                           <td style={{ padding: '12px' }}><span className="badge badge-green">Success</span></td>
+                         </tr>
+                       ))
+                    ) : (
+                       <tr><td colSpan="5" style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>No live payouts recorded in local ledger.</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -2005,19 +2004,23 @@ export default function App() {
               </header>
               <div className="card glass-panel" style={{ textAlign: 'center', padding: '40px' }}>
                 <TrendingDown size={48} color="var(--primary)" style={{ marginBottom: '16px' }} />
-                <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Current Weekly Loss Ratio</div>
-                <h1 style={{ fontSize: '3rem', color: 'var(--text-main)', marginBottom: '16px' }}>64.2%</h1>
+                <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Live Capital Loss Ratio</div>
+                <h1 style={{ fontSize: '3rem', color: 'var(--text-main)', marginBottom: '16px' }}>
+                  {adminData.policies && adminData.policies.reduce((acc, pol) => acc + pol.premium_paid, 0) > 0 ?
+                    ((adminData.claims.filter(c => c.status === 'APPROVED').reduce((acc, claim) => acc + claim.payout_amount, 0) / adminData.policies.reduce((acc, pol) => acc + pol.premium_paid, 0)) * 100).toFixed(1)
+                  : 0}%
+                </h1>
                 <p style={{ maxWidth: '600px', margin: '0 auto', color: 'var(--text-muted)' }}>
-                  This means for every ₹100 collected in premiums, ₹64.20 is being paid out in parametric claims. The model target is 65%, indicating the current pricing structure is highly sustainable.
+                  This reflects the literal payout ratios computed dynamically from the `aegis.db` ledger. For every ₹100 collected in premiums, this ratio shows how much capital is flowing out as parametric payouts.
                 </p>
                 <div style={{ marginTop: '32px', display: 'flex', justifyContent: 'center', gap: '32px' }}>
                   <div>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Premiums (Week)</div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹4,98,050</div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Premiums (Database)</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹{adminData.policies ? adminData.policies.reduce((acc, pol) => acc + pol.premium_paid, 0).toLocaleString() : 0}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Payouts (Week)</div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹3,19,748</div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Payouts (Database)</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹{adminData.claims ? adminData.claims.filter(c => c.status === 'APPROVED').reduce((acc, claim) => acc + claim.payout_amount, 0).toLocaleString() : 0}</div>
                   </div>
                 </div>
               </div>
