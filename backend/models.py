@@ -15,6 +15,7 @@ class Worker(Base):
     avg_weekly_earnings = Column(Float)
     r_score = Column(Float, default=100.0)
     wallet_balance = Column(Float, default=0.0)
+    terms_accepted_at = Column(DateTime, nullable=True)
 
 class Policy(Base):
     __tablename__ = "policies"
@@ -38,3 +39,5 @@ class Claim(Base):
     status = Column(String, default="PENDING")
     payout_amount = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    fraud_score = Column(Float, nullable=True)
+    rejection_reason = Column(String, nullable=True)
