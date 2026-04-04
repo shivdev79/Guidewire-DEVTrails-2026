@@ -3,6 +3,7 @@ import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, CheckCircle2, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase, Loader2, X, PlusCircle, Smartphone, Building2, ShoppingBag, Lock } from 'lucide-react';
 import RegistrationFlow from './RegistrationFlow';
+import PlanSelection from './PlanSelection';
 import ControlCenter from './ControlCenter';
 import Testimonials from './Testimonials';
 import InfoSection from './InfoSection';
@@ -305,7 +306,7 @@ const stringifyPlatform = (platform) => {
 };
 
 export default function App() {
-  const [currentView, setCurrentView] = useState('login'); // login, onboarding, rider-dash, admin-dash
+  const [currentView, setCurrentView] = useState('login'); // login, onboarding, plan-selection, rider-dash, admin-dash
 
   // Rider State
   const [riderInfo, setRiderInfo] = useState({
@@ -348,6 +349,10 @@ export default function App() {
   const [parametricTriggerResult, setParametricTriggerResult] = useState(null);
   const [parametricCity, setParametricCity] = useState('Mumbai');
   const [parametricTriggerLoading, setParametricTriggerLoading] = useState(false);
+  
+  // Demo user & registration flow
+  const [isDemoUser, setIsDemoUser] = useState(false);
+  const [isFromRegistration, setIsFromRegistration] = useState(false);
 
   useEffect(() => {
     if (currentView === 'rider-dash' && !hasActivePolicy && !hasPromptedPlanToast) {
@@ -384,6 +389,75 @@ export default function App() {
     }, ...prev]);
     setManualClaim({ reason: 'Rain', description: '', amount: '' });
     setRiderTab('overview');
+  };
+
+  // Demo User Login Handler
+  const handleDemoUserLogin = async () => {
+    try {
+      // Create or get demo user
+      const demoRes = await axios.post(`${API_BASE_URL}/register`, {
+        name: 'Demo Worker',
+        phone: '9876543210',
+        upi_id: 'demo@aegis.app',
+        platform: 'Zomato, Swiggy',
+        city: 'Mumbai',
+        pincode: '400001',
+        avg_weekly_earnings: 8000,
+      });
+
+      const demoWorkerId = demoRes.data.id;
+
+      // Add wallet balance for demo user
+      await axios.post(`${API_BASE_URL}/wallet/top-up`, {
+        worker_id: demoWorkerId,
+        amount: 1000,
+        source: 'DEMO_INITIAL_BALANCE'
+      });
+
+      setWorkerId(demoWorkerId);
+      setIsDemoUser(true);
+      setRiderInfo({
+        name: 'Demo Worker',
+        platform: ['Zomato', 'Swiggy'],
+        vehicle: '2-Wheeler',
+        shift: 'Full Day',
+        avgOrders: '24',
+        yearsExp: '3+ years',
+        zone: 'z1',
+        avgEarnings: 8000,
+        city: 'Mumbai',
+        mobile: '9876543210',
+        email: 'demo@aegis.app',
+        pincode: '400001',
+      });
+      
+      // Set wallet balance for demo user
+      setWalletBalance(1000);
+      
+      // Redirect to plan selection instead of dashboard
+      setCurrentView('plan-selection');
+    } catch (error) {
+      console.error('Demo login failed:', error);
+      // Fallback: use existing demo worker (ID: 174)
+      setWorkerId(174);
+      setIsDemoUser(true);
+      setRiderInfo({
+        name: 'Demo Worker',
+        platform: ['Zomato', 'Swiggy'],
+        vehicle: '2-Wheeler',
+        shift: 'Full Day',
+        avgOrders: '24',
+        yearsExp: '3+ years',
+        zone: 'z1',
+        avgEarnings: 8000,
+        city: 'Mumbai',
+        mobile: '9876543210',
+        email: 'demo@aegis.app',
+        pincode: '400001',
+      });
+      setWalletBalance(1000);
+      setCurrentView('plan-selection');
+    }
   };
 
   // Parametric Trigger Handlers (Location-Based Automatic Claims)
@@ -851,6 +925,17 @@ export default function App() {
                   <input type='email' placeholder='Email Address' style={{ padding: '18px 20px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', color: '#fff', fontSize: '1rem', outline: 'none', transition: 'all 0.3s' }} value={riderInfo.email || ''} onChange={e => setRiderInfo({...riderInfo, email: e.target.value})} onFocus={(e) => e.target.style.borderColor = 'rgba(255,199,44,0.5)'} onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
                   <input type='password' placeholder='Password' style={{ padding: '18px 20px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', color: '#fff', fontSize: '1rem', outline: 'none', transition: 'all 0.3s' }} value={riderInfo.password || ''} onChange={e => setRiderInfo({...riderInfo, password: e.target.value})} onFocus={(e) => e.target.style.borderColor = 'rgba(255,199,44,0.5)'} onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
                   <motion.button whileHover={{ scale: 1.02, boxShadow: '0 15px 30px rgba(245, 158, 11, 0.4)' }} whileTap={{ scale: 0.98 }} onClick={() => { setWorkerId(1); setCurrentView('rider-dash'); }} style={{ padding: '18px', background: 'linear-gradient(135deg, #FFC72C, #F59E0B)', color: '#0f172a', border: 'none', borderRadius: '20px', fontWeight: 800, fontSize: '1.05rem', cursor: 'pointer', marginTop: '12px', boxShadow: '0 10px 25px rgba(245, 158, 11, 0.2)' }}>Authenticate</motion.button>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '16px' }}>
+                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+                    <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 600 }}>or</span>
+                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+                  </div>
+                  
+                  <motion.button whileHover={{ scale: 1.02, borderColor: 'rgba(16, 185, 129, 0.5)' }} whileTap={{ scale: 0.98 }} onClick={handleDemoUserLogin} style={{ padding: '18px', background: 'rgba(16, 185, 129, 0.1)', border: '2px solid rgba(16, 185, 129, 0.3)', borderRadius: '20px', color: '#10b981', fontWeight: 800, fontSize: '1.05rem', cursor: 'pointer', transition: 'all 0.3s' }}>
+                    <Zap size={18} style={{ display: 'inline', marginRight: '8px' }} />
+                    Try Demo Access
+                  </motion.button>
                 </div>
 
                 <div style={{ marginTop: '36px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1197,6 +1282,7 @@ export default function App() {
       setCalculatedPremium={setCalculatedPremium}
       setCoverageAmount={setCoverageAmount}
       setRScore={setRScore}
+      setIsFromRegistration={setIsFromRegistration}
     />
   );
 
@@ -2687,6 +2773,22 @@ export default function App() {
     <>
       {currentView === 'login' && renderLogin()}
       {currentView === 'onboarding' && renderOnboarding()}
+      {currentView === 'plan-selection' && (
+        <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #F0F7FB 0%, #FFFFFF 100%)' }}>
+          <PlanSelection
+            riderInfo={riderInfo}
+            workerId={workerId}
+            walletBalance={walletBalance}
+            setWalletBalance={setWalletBalance}
+            setCurrentView={setCurrentView}
+            setActivatedPlan={setActivatedPlan}
+            setHasActivePolicy={setHasActivePolicy}
+            setCalculatedPremium={setCalculatedPremium}
+            setCoverageAmount={setCoverageAmount}
+            onCancel={() => setCurrentView('rider-dash')}
+          />
+        </div>
+      )}
       {currentView === 'rider-dash' && renderRiderDashboard()}
       {currentView === 'admin-dash' && <ControlCenter setCurrentView={setCurrentView} adminLogs={adminLogs} engineStates={engineStates} injectScenario={injectScenario} resetEngines={resetEngines} parametricTriggerResult={parametricTriggerResult} setParametricTriggerResult={setParametricTriggerResult} parametricCity={parametricCity} setParametricCity={setParametricCity} parametricTriggerLoading={parametricTriggerLoading} handleParametricRainTrigger={handleParametricRainTrigger} handleParametricHeatTrigger={handleParametricHeatTrigger} handleParametricStrikeTrigger={handleParametricStrikeTrigger} />}
       {renderAddMoneyModal()}

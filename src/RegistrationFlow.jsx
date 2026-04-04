@@ -21,6 +21,7 @@ export default function RegistrationFlow({
   setCalculatedPremium,
   setCoverageAmount,
   setRScore,
+  setIsFromRegistration,
 }) {
   const [phase, setPhase] = useState('A');
   const [kycStatus, setKycStatus] = useState('idle'); // idle, loading, verified
@@ -88,28 +89,17 @@ export default function RegistrationFlow({
         avg_weekly_earnings: riderInfo.avgEarnings || 6000,
       });
       setWorkerId(res.data.id);
-
-      const tier = (riderInfo.avgEarnings || 6000) > 5000 ? 'Elite' : (riderInfo.avgEarnings || 6000) > 3000 ? 'Pro' : 'Base';
-      const premRes = await axios.post(`${API_BASE_URL}/calculate-premium`, {
-        worker_id: res.data.id,
-        tier: tier,
-      });
-      setCalculatedPremium(premRes.data.premium_amount || 0);
-      setCoverageAmount(premRes.data.coverage_amount || 0);
-      setRScore(75);
+      setIsFromRegistration(true);
       
       setActivationAlert(false);
-      setCurrentView('rider-dash');
+      setCurrentView('plan-selection');
     } catch (e) {
       console.error(e);
-      // Must be a numeric id: API paths use /worker/{worker_id}/… (integer). Never use strings like "W-742".
       console.warn("Network unreachable, seamlessly falling back to mock demo entry...");
       setWorkerId(1);
-      setRScore(75);
-      setCalculatedPremium(250);
-      setCoverageAmount(5000);
+      setIsFromRegistration(true);
       setActivationAlert(false);
-      setCurrentView('rider-dash');
+      setCurrentView('plan-selection');
     }
   };
 

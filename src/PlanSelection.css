@@ -1,0 +1,54 @@
+.plan-selection-wrapper {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 60px 24px;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.plan-selection-header {
+  margin-bottom: 60px;
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 28px;
+  margin-bottom: 40px;
+}
+
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.plan-card:hover:not(.selected) {
+  box-shadow: 0 12px 30px rgba(18, 121, 168, 0.1);
+  transform: translateY(-4px);
+}
+
+.plan-card.selected {
+  position: relative;
+}
+
+.plan-card.recommended {
+  border: 2px solid #F59E0B !important;
+  background: linear-gradient(to bottom, #FFFBF0, #FFFFFF) !important;
+}
+
+.plan-card.recommended::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.02) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .plans-grid {
+    grid-template-columns: 1fr;
+  }
+}

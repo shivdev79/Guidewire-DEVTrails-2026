@@ -119,6 +119,41 @@ def simulate_rebate(worker_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "success", "message": f"Mid-week risk evaporated. Issued ₹{rebate_amount} partial rebate.", "wallet_balance": worker.wallet_balance}
 
+@app.post("/wallet/top-up")
+def wallet_top_up(request: dict, db: Session = Depends(get_db)):
+    """Add balance to worker's wallet"""
+    worker_id = request.get('worker_id')
+    amount = request.get('amount', 0)
+    source = request.get('source', 'MANUAL_TOP_UP')
+    
+    if not worker_id:
+        raise HTTPException(status_code=400, detail="worker_id is required")
+    
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+    
+    if amount > 100000:  # Prevent unrealistic amounts
+        raise HTTPException(status_code=400, detail="Amount exceeds maximum limit")
+    
+    worker = db.query(models.Worker).filter(models.Worker.id == worker_id).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    
+    worker.wallet_balance += float(amount)
+    db.commit()
+    db.refresh(worker)
+    
+    return {
+        "status": "success",
+        "message": f"Successfully added ₹{amount} to your wallet",
+        "wallet_balance": worker.wallet_balance,
+        "worker": {
+            "id": worker.id,
+            "name": worker.name,
+            "wallet_balance": worker.wallet_balance
+        }
+    }
+
 # ==================== CLAIMS ENDPOINTS ====================
 
 @app.post("/claim/manual")
