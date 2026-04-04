@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase } from 'lucide-react';
+import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, CheckCircle2, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase } from 'lucide-react';
+import RegistrationFlow from './RegistrationFlow';
 import ControlCenter from './ControlCenter';
 
 const API_BASE_URL = 'http://localhost:8000';
@@ -169,20 +170,18 @@ export default function App() {
 
   // Rider State
   const [riderInfo, setRiderInfo] = useState({
-    name: '', platform: 'Zomato', zone: 'z1', avgEarnings: 1500,
-    gender: 'Male', dob: '', mobile: '', email: '', pincode: '', city: 'Mumbai', occupation: 'Platform Partner'
+    name: '', platform: ['Zomato'], vehicle: '2-Wheeler', shift: 'Morning', avgOrders: '', yearsExp: 'Select', zone: 'z1', avgEarnings: 6000,
+    gender: 'Male', dob: '', mobile: '', email: '', password: '', aadhaar: '', upiId: '', bankName: '', accountNo: '', pincode: '', city: 'Mumbai', occupation: 'Platform Partner'
   });
   const [workerId, setWorkerId] = useState(null);
+  const [onboardingPhase, setOnboardingPhase] = useState('A');
+  const [kycStatus, setKycStatus] = useState('Unverified');
   const [rScore, setRScore] = useState(100);
   const [walletBalance, setWalletBalance] = useState(0);
 
   const [hasActivePolicy, setHasActivePolicy] = useState(false);
   const [coverageAmount, setCoverageAmount] = useState(0);
   const [calculatedPremium, setCalculatedPremium] = useState(0);
-  
-  const [showTermsModal, setShowTermsModal] = useState(false);
-  const [circuitBreakerActive, setCircuitBreakerActive] = useState(false);
-  const [showNudge, setShowNudge] = useState(false);
   
   const [claims, setClaims] = useState([]);
   const [riderTab, setRiderTab] = useState('overview');
@@ -192,64 +191,17 @@ export default function App() {
   const [activatedPlan, setActivatedPlan] = useState(null);
   const [showPricingBreakdown, setShowPricingBreakdown] = useState(null); // policy.id or null
 
-  const [adminData, setAdminData] = useState({ workers: [], policies: [], claims: [], metrics: {} });
-  
-  useEffect(() => {
-    if (currentView === 'admin-dash') {
-      const fetchAdminData = async () => {
-        try {
-          const res = await axios.get(`${API_BASE_URL}/admin/ledger`);
-          setAdminData(res.data);
-        } catch (e) {
-          console.error("Admin data fetch error", e);
-        }
-      };
-      fetchAdminData();
-      const interval = setInterval(fetchAdminData, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [currentView]);
-
-  const downloadSQLiteDump = () => {
-    const filename = 'aegis_ledger_dump.json';
-    const jsonStr = JSON.stringify(adminData, null, 2);
-    let element = document.createElement('a');
-    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(jsonStr));
-    element.setAttribute('download', filename);
-    element.style.display = 'none';
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-  };
-
-  const handleManualClaimSubmit = async (e) => {
+  const handleManualClaimSubmit = (e) => {
     e.preventDefault();
-    if (!workerId) return;
-    try {
-      await axios.post(`${API_BASE_URL}/claim/manual`, {
-         worker_id: workerId,
-         reason: manualClaim.reason,
-         description: manualClaim.description,
-         amount: Number(manualClaim.amount || Math.round(riderInfo.avgEarnings * 0.4))
-      });
-      alert("Manual Claim Submitted for Review!");
-      setManualClaim({ reason: 'Rain', description: '', amount: '' });
-      setRiderTab('overview');
-    } catch (err) {
-      console.error(err);
-      alert("Failed submitting manual claim.");
-    }
-  };
-
-  const handleNudgeCompliance = async () => {
-    setShowNudge(false);
-    if (!workerId) return;
-    try {
-       const res = await axios.post(`${API_BASE_URL}/simulate-rebate/${workerId}`);
-       alert(res.data.message);
-    } catch (e) {
-       console.error("Rebate error", e);
-    }
+    setClaims(prev => [{
+      id: 'CLM-' + Math.floor(Math.random() * 100000),
+      date: new Date().toLocaleDateString(),
+      reason: manualClaim.reason + ' (Manual Claim)',
+      amount: manualClaim.amount || Math.round(riderInfo.avgEarnings * 0.4),
+      status: 'Pending Review'
+    }, ...prev]);
+    setManualClaim({ reason: 'Rain', description: '', amount: '' });
+    setRiderTab('overview');
   };
 
   // Global condition simulator
@@ -286,11 +238,6 @@ export default function App() {
         try {
           const res = await axios.get(`${API_BASE_URL}/worker/${workerId}/dashboard`);
           const data = res.data;
-          
-          if (data.system_status) {
-            setCircuitBreakerActive(data.system_status.circuit_breaker_active);
-          }
-          
           if (data.active_policy) {
             setHasActivePolicy(true);
             setCoverageAmount(data.active_policy.coverage_amount);
@@ -350,24 +297,17 @@ export default function App() {
     }
   };
 
-  const initiatePolicy = () => {
+  const initiatePolicy = async () => {
     if (!workerId) return;
-    setShowTermsModal(true);
-  };
-
-  const confirmPolicy = async () => {
     try {
        const tier = riderInfo.avgEarnings > 5000 ? 'Elite' : (riderInfo.avgEarnings > 3000 ? 'Pro' : 'Base');
        await axios.post(`${API_BASE_URL}/create-policy`, {
          worker_id: workerId,
-         tier: tier,
-         accepted_terms: true
+         tier: tier
        });
        setHasActivePolicy(true);
-       setShowTermsModal(false);
     } catch (e) {
        console.error("Failed to create policy", e);
-       alert("Failed to create policy: " + (e.response?.data?.detail || e.message));
     }
   };
 
@@ -499,82 +439,69 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right Column (Mobile Login Mockup) */}
-          <div style={{ flex: 0.8, display: 'flex', justifyContent: 'center' }}>
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.8 }} style={{ width: '340px', height: '620px', background: '#1c1c1c', borderRadius: '48px', padding: '12px', boxShadow: '0 40px 80px rgba(0,0,0,0.5), inset 0 0 12px rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.15)', position: 'relative' }}>
-              {/* Inner Screen */}
-              <div style={{ width: '100%', height: '100%', background: '#fff', borderRadius: '36px', overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                
-                {/* Status Bar / Dynamic Island */}
-                <div style={{ position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)', width: '90px', height: '26px', background: '#000', borderRadius: '20px', zIndex: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#18181b', border: '1px solid #333' }}></div>
+          {/* Right Column (Glassmorphic Login Panel) */}
+          <div style={{ flex: 0.9, display: 'flex', justifyContent: 'flex-end', position: 'relative' }}>
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.8 }} style={{ width: '420px', background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%)', borderRadius: '32px', padding: '40px 32px', boxShadow: '0 30px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(24px)', position: 'relative', overflow: 'hidden' }}>
+              
+              {/* Subtle background glow inside the card */}
+              <div style={{ position: 'absolute', top: '-20%', left: '-20%', width: '200px', height: '200px', background: 'radial-gradient(circle, rgba(255,199,44,0.15) 0%, transparent 70%)', filter: 'blur(40px)', zIndex: 0 }}></div>
+
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                <div style={{ marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '16px', background: 'linear-gradient(135deg, #FFC72C, #F59E0B)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 20px rgba(255, 199, 44, 0.3), inset 0 2px 4px rgba(255,255,255,0.3)' }}>
+                    <Shield size={24} color="#0f172a" strokeWidth={2.5} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.5px' }}>Terminal Access</h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>Secure Double-Lock Portal</p>
+                  </div>
                 </div>
 
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#ffffff', position: 'relative' }}>
-                  {/* Top Insurance Graphic */}
-                  <div style={{ background: 'linear-gradient(135deg, #00678a, #004b66)', height: '250px', padding: '60px 24px 20px', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderBottomLeftRadius: '32px', borderBottomRightRadius: '32px', boxShadow: '0 10px 20px rgba(0,103,138,0.15)', position: 'relative', overflow: 'hidden' }}>
-                    <div style={{ position: 'absolute', top: '-10px', right: '-20px', opacity: 0.1 }}>
-                      <Shield size={180} />
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', zIndex: 1 }}>
-                      <Shield size={32} color="#FFC72C" />
-                      <div style={{ fontSize: '1.2rem', fontWeight: 800, letterSpacing: '1px' }}>AEGIS PORTAL</div>
-                    </div>
-                    <div style={{ zIndex: 1 }}>
-                      <div style={{ fontSize: '1.6rem', fontWeight: 800, lineHeight: 1.2, fontFamily: '"Montserrat", sans-serif' }}>Your Income.<br/>Protected.</div>
-                      <div style={{ fontSize: '0.85rem', color: '#e0f2fe', marginTop: '8px', fontFamily: '"Poppins", sans-serif' }}>Select terminal access level</div>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div style={{ padding: '32px 24px', display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
-                    <motion.button
-                      whileHover={{ scale: 1.02, boxShadow: '0 10px 25px rgba(255, 199, 44, 0.4)' }}
-                      whileTap={{ scale: 0.98 }}
-                      style={{ width: '100%', padding: '16px', fontSize: '1.05rem', background: '#FFC72C', color: '#00678a', borderRadius: '16px', fontWeight: 800, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-                      onClick={() => setCurrentView('onboarding')}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <User size={20} />
-                        <span>Partner • Rider</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <motion.button whileHover={{ scale: 1.02, backgroundColor: 'rgba(255, 255, 255, 0.08)', borderColor: 'rgba(255, 255, 255, 0.15)' }} whileTap={{ scale: 0.98 }} style={{ padding: '20px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', transition: 'all 0.3s ease' }} onClick={() => setCurrentView('onboarding')}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <div style={{ background: 'rgba(255, 199, 44, 0.15)', padding: '12px', borderRadius: '14px', border: '1px solid rgba(255, 199, 44, 0.1)' }}><User size={24} color="#FFC72C" /></div>
+                      <div style={{ textAlign: 'left' }}>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc' }}>Partner / Rider</div>
+                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Access resilience wallet</div>
                       </div>
-                      <ArrowRightLeft size={18} />
-                    </motion.button>
-
-                    <div style={{ position: 'relative', margin: '6px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <div style={{ flex: 1, borderTop: '1px solid #eee' }}></div>
-                      <span style={{ padding: '0 12px', color: '#aaa', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '1px' }}>OR</span>
-                      <div style={{ flex: 1, borderTop: '1px solid #eee' }}></div>
                     </div>
+                    <ArrowRightLeft size={20} color="#FFC72C" opacity={0.8} />
+                  </motion.button>
 
-                    <motion.button
-                      whileHover={{ scale: 1.02, boxShadow: '0 10px 25px rgba(0, 103, 138, 0.15)' }}
-                      whileTap={{ scale: 0.98 }}
-                      style={{ width: '100%', padding: '16px', fontSize: '1.05rem', background: '#f8fbfc', color: '#00678a', border: '2px solid rgba(0,103,138,0.2)', borderRadius: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-                      onClick={() => setCurrentView('admin-dash')}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <Briefcase size={20} />
-                        <span>Insurer Login</span>
+                  <motion.button whileHover={{ scale: 1.02, backgroundColor: 'rgba(255, 255, 255, 0.08)', borderColor: 'rgba(255, 255, 255, 0.15)' }} whileTap={{ scale: 0.98 }} style={{ padding: '20px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', transition: 'all 0.3s ease' }} onClick={() => setCurrentView('admin-dash')}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <div style={{ background: 'rgba(56, 189, 248, 0.15)', padding: '12px', borderRadius: '14px', border: '1px solid rgba(56, 189, 248, 0.1)' }}><ShieldCheck size={24} color="#38bdf8" /></div>
+                      <div style={{ textAlign: 'left' }}>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc' }}>Admin / Insurer</div>
+                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Operational command center</div>
                       </div>
-                      <ShieldCheck size={18} />
-                    </motion.button>
-                  </div>
-
-                  {/* Trust Badges */}
-                  <div style={{ padding: '24px', background: '#f9fafb', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ background: '#ecfdf5', padding: '6px', borderRadius: '8px' }}><CheckCircle size={16} color="#10b981" /></div>
-                      <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, fontFamily: '"Poppins", sans-serif' }}>Play Integrity Secured</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ background: '#eff6ff', padding: '8px', borderRadius: '8px' }}><Activity size={16} color="#3b82f6" /></div>
-                      <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, fontFamily: '"Poppins", sans-serif' }}>Guidewire ClaimCenter Synced</span>
-                    </div>
-                  </div>
+                    <ArrowRightLeft size={20} color="#38bdf8" opacity={0.8} />
+                  </motion.button>
+                </div>
 
-                  {/* Home Indicator */}
-                  <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', width: '35%', height: '4px', background: '#ddd', borderRadius: '2px' }}></div>
+                <div style={{ display: 'flex', alignItems: 'center', margin: '32px 0', gap: '16px' }}>
+                  <div style={{ flex: 1, height: '1px', background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.15))' }}></div>
+                  <span style={{ color: '#64748b', fontSize: '0.8rem', fontWeight: 600, letterSpacing: '2px' }}>OR LOGIN</span>
+                  <div style={{ flex: 1, height: '1px', background: 'linear-gradient(to left, transparent, rgba(255,255,255,0.15))' }}></div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <input type='email' placeholder='Email Address' style={{ padding: '18px 20px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', color: '#fff', fontSize: '1rem', outline: 'none', transition: 'all 0.3s' }} value={riderInfo.email || ''} onChange={e => setRiderInfo({...riderInfo, email: e.target.value})} onFocus={(e) => e.target.style.borderColor = 'rgba(255,199,44,0.5)'} onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
+                  <input type='password' placeholder='Password' style={{ padding: '18px 20px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', color: '#fff', fontSize: '1rem', outline: 'none', transition: 'all 0.3s' }} value={riderInfo.password || ''} onChange={e => setRiderInfo({...riderInfo, password: e.target.value})} onFocus={(e) => e.target.style.borderColor = 'rgba(255,199,44,0.5)'} onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
+                  <motion.button whileHover={{ scale: 1.02, boxShadow: '0 15px 30px rgba(245, 158, 11, 0.4)' }} whileTap={{ scale: 0.98 }} onClick={() => { setWorkerId(1); setCurrentView('rider-dash'); }} style={{ padding: '18px', background: 'linear-gradient(135deg, #FFC72C, #F59E0B)', color: '#0f172a', border: 'none', borderRadius: '20px', fontWeight: 800, fontSize: '1.05rem', cursor: 'pointer', marginTop: '12px', boxShadow: '0 10px 25px rgba(245, 158, 11, 0.2)' }}>Authenticate</motion.button>
+                </div>
+
+                <div style={{ marginTop: '36px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                    <CheckCircle size={14} color="#10b981" />
+                    <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>Play Integrity</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(56, 189, 248, 0.05)', borderRadius: '20px', border: '1px solid rgba(56, 189, 248, 0.1)' }}>
+                    <Activity size={14} color="#38bdf8" />
+                    <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 600 }}>Guidewire Synced</span>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -650,128 +577,28 @@ export default function App() {
               </motion.div>
             </div>
 
-            {/* Right Side - Creative 3D Phone Mockup */}
-            <div style={{ flex: 0.9, position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'radial-gradient(circle at center, rgba(0,103,138,0.06) 0%, transparent 70%)', minHeight: '700px' }}>
-              
-              {/* Abstract Circular Behind Phone */}
-              <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 40, ease: "linear" }} style={{ position: 'absolute', width: '480px', height: '480px', border: '2px dashed rgba(0,103,138,0.15)', borderRadius: '50%', background: 'conic-gradient(from 0deg, transparent 0%, rgba(0,103,138,0.05) 25%, transparent 50%)', zIndex: 0 }}></motion.div>
-              <div style={{ position: 'absolute', width: '380px', height: '380px', border: '1px solid rgba(0,103,138,0.1)', borderRadius: '50%', zIndex: 0 }}></div>
-
-              {/* Floating Card 1: Payout */}
-              <motion.div initial={{ opacity: 0, x: 50, y: -20 }} whileInView={{ opacity: 1, x: 0, y: 0 }} transition={{ duration: 0.8, delay: 0.6 }} viewport={{ once: true }} 
-                 whileHover={{ scale: 1.05 }}
-                 style={{ position: 'absolute', top: '22%', right: '-15px', background: 'white', padding: '16px 20px', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,103,138,0.15)', zIndex: 3, display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid rgba(0,103,138,0.05)', cursor: 'pointer' }}>
-                <div style={{ background: '#ecfdf5', padding: '10px', borderRadius: '12px' }}><CheckCircle size={24} color="#10b981" /></div>
-                <div>
-                   <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: 600 }}>Payout Initiated</div>
-                   <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#333' }}>+ ₹1,500 <span style={{fontSize: '0.8rem', fontWeight: 500}}>UPI</span></div>
-                </div>
-              </motion.div>
-
-              {/* Floating Card 2: Risk Alert */}
-              <motion.div initial={{ opacity: 0, x: -50, y: 20 }} whileInView={{ opacity: 1, x: 0, y: 0 }} transition={{ duration: 0.8, delay: 0.8 }} viewport={{ once: true }} 
-                 whileHover={{ scale: 1.05 }}
-                 style={{ position: 'absolute', bottom: '22%', left: '10px', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(20px)', padding: '16px 20px', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,103,138,0.15)', zIndex: 3, display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid rgba(0,103,138,0.05)', cursor: 'pointer' }}>
-                <div style={{ background: '#fef2f2', padding: '10px', borderRadius: '12px' }}><AlertTriangle size={24} color="#ef4444" /></div>
-                <div>
-                   <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: 600 }}>Risk Detected</div>
-                   <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#333' }}>Heavy Rain Sector 4</div>
-                </div>
-              </motion.div>
-
-              {/* Phone Frame wrapper with float animation */}
-              <motion.div animate={{ y: [0, -15, 0] }} transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }} style={{ position: 'relative', zIndex: 1, transform: 'rotate(5deg)' }}>
-                <div style={{ width: '310px', height: '630px', background: '#111', borderRadius: '48px', padding: '10px', boxShadow: '0 30px 60px rgba(0,0,0,0.25), inset 0 0 10px rgba(255,255,255,0.4)', border: '2px solid rgba(255,255,255,0.2)' }}>
-                  {/* Inner Screen */}
-                  <div style={{ width: '100%', height: '100%', background: '#fff', borderRadius: '38px', overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                     {/* Dynamic Island */}
-                     <div style={{ position: 'absolute', top: '8px', left: '50%', transform: 'translateX(-50%)', width: '100px', height: '28px', background: '#000', borderRadius: '20px', zIndex: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                       <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#111', border: '1px solid #333' }}></div>
-                     </div>
-
-                     {/* App Topbar */}
-                     <div style={{ background: '#fdfdfd', padding: '50px 20px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                         <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #00678a, #003366)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,103,138,0.2)' }}>
-                           <User size={20} color="white" />
-                         </div>
-                         <div>
-                           <div style={{ fontSize: '0.8rem', color: '#666', fontFamily: '"Poppins", sans-serif' }}>Partner Portal</div>
-                           <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#333' }}>Live Status</div>
-                         </div>
-                       </div>
-                       <div style={{ position: 'relative', background: '#f0f4f8', padding: '8px', borderRadius: '50%' }}>
-                         <Bell size={20} color="#00678a" />
-                         <div style={{ position: 'absolute', top: '8px', right: '8px', width: '8px', height: '8px', background: '#ff3b30', borderRadius: '50%', border: '2px solid white' }}></div>
-                       </div>
-                     </div>
-
-                     {/* App Content */}
-                     <div style={{ padding: '20px', background: '#f8f9fa', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        
-                        {/* Active Coverage Glowing Card */}
-                        <div style={{ background: 'linear-gradient(135deg, #00678a 0%, #004b66 100%)', borderRadius: '24px', padding: '24px', color: 'white', boxShadow: '0 12px 30px rgba(0, 103, 138, 0.3)', position: 'relative', overflow: 'hidden' }}>
-                          <motion.div animate={{ scale: [1, 1.1, 1], opacity: [0.1, 0.15, 0.1] }} transition={{ repeat: Infinity, duration: 4 }} style={{ position: 'absolute', right: '-20px', bottom: '-20px' }}>
-                            <ShieldCheck size={140} />
-                          </motion.div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', position: 'relative' }}>
-                             <div style={{ padding: '6px', background: 'rgba(255,255,255,0.15)', borderRadius: '10px' }}>
-                               <ShieldCheck size={20} color="#FFC72C" />
-                             </div>
-                             <span style={{ fontWeight: 600, fontSize: '0.9rem', letterSpacing: '0.5px' }}>ACTIVE COVERAGE</span>
-                          </div>
-                          <div style={{ fontSize: '0.8rem', opacity: 0.9, marginBottom: '2px', position: 'relative' }}>Current Weekly Floor</div>
-                          <div style={{ fontSize: '2.2rem', fontWeight: 800, marginBottom: '20px', letterSpacing: '-0.5px', position: 'relative' }}>₹8,000</div>
-                          <button style={{ background: '#FFC72C', color: '#00678a', border: 'none', padding: '12px 16px', borderRadius: '14px', fontSize: '0.9rem', fontWeight: 800, width: '100%', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', position: 'relative' }}>Renew Policy</button>
-                        </div>
-
-                        <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#333', marginTop: '4px' }}>Essentials</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-                           <div style={{ background: 'white', padding: '14px 8px', borderRadius: '18px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ background: '#eff6ff', padding: '12px', borderRadius: '14px' }}><Upload size={20} color="#3b82f6" /></div>
-                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#444' }}>Claim</div>
-                           </div>
-                           <div style={{ background: 'white', padding: '14px 8px', borderRadius: '18px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ background: '#fffbeb', padding: '12px', borderRadius: '14px' }}><Wallet size={20} color="#d97706" /></div>
-                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#444' }}>Wallet</div>
-                           </div>
-                           <div style={{ background: 'white', padding: '14px 8px', borderRadius: '18px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '14px' }}><Map size={20} color="#10b981" /></div>
-                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#444' }}>Zones</div>
-                           </div>
-                        </div>
-
-                        <div style={{ background: 'white', padding: '16px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '14px', marginTop: '4px' }}>
-                           <div style={{ background: '#fef2f2', padding: '12px', borderRadius: '14px' }}>
-                             <CloudRainWind size={22} color="#ef4444" />
-                           </div>
-                           <div>
-                              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#333' }}>Heavy Rain Forecast</div>
-                              <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '2px', fontWeight: 500 }}>Severe • Next 2 hours</div>
-                           </div>
-                        </div>
-                     </div>
-
-                     {/* App Bottom Navbar */}
-                     <div style={{ background: 'white', padding: '16px 20px 24px 20px', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f0f0f0' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#00678a' }}>
-                          <Activity size={22} /><span style={{ fontSize: '0.65rem', fontWeight: 800 }}>Home</span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#ccc' }}>
-                          <ShieldCheck size={22} /><span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Policies</span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#ccc' }}>
-                          <Wallet size={22} /><span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Wallet</span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#ccc' }}>
-                          <User size={22} /><span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Profile</span>
-                        </div>
-                     </div>
-                     {/* Home Indicator */}
-                     <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', width: '35%', height: '4px', background: '#ccc', borderRadius: '2px' }}></div>
-                  </div>
-                </div>
-              </motion.div>
+            {/* Right Side - Mobile Mockup & App Visuals */}
+            <div style={{ flex: 0.9, position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '600px' }}>
+              <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                 <motion.img 
+                   initial={{ opacity: 0, y: 30 }} 
+                   whileInView={{ opacity: 1, y: 0 }} 
+                   transition={{ duration: 0.8, delay: 0.2 }} 
+                   viewport={{ once: true }}
+                   src="/mobile-mockup.png" 
+                   alt="AEGIS App Mobile Interface" 
+                   style={{ zIndex: 2, height: '550px', objectFit: 'contain', filter: 'drop-shadow(0 30px 60px rgba(0,103,138,0.25))' }} 
+                 />
+                 <motion.img 
+                   initial={{ opacity: 0, x: 40 }} 
+                   whileInView={{ opacity: 1, x: 0 }} 
+                   transition={{ duration: 0.8, delay: 0.5 }} 
+                   viewport={{ once: true }}
+                   src="/bike-illustration.png" 
+                   alt="Gig Worker" 
+                   style={{ zIndex: 1, position: 'absolute', bottom: '20px', right: '-40px', height: '300px', objectFit: 'contain', mixBlendMode: 'multiply', opacity: 0.9 }} 
+                 />
+              </div>
             </div>
           </div>
         </div>
@@ -901,195 +728,114 @@ export default function App() {
         </div>
 
       </div>
+
+      {/* Coverage Section */}
+      <div style={{ width: '100%', background: '#F9FAFB', padding: '100px 20px', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ maxWidth: '1200px', width: '100%' }}>
+          <div style={{ textAlign: 'center', marginBottom: '60px' }}>
+            <h2 style={{ fontSize: '3rem', color: '#0A1F2E', marginBottom: '24px', fontWeight: 800, fontFamily: '"Syne", sans-serif' }}>What is Covered by AEGIS Income Protection?</h2>
+            <p style={{ fontSize: '1.2rem', color: '#5A7A8A', fontFamily: '"DM Sans", sans-serif', maxWidth: '800px', margin: '0 auto', lineHeight: 1.6 }}>
+              AEGIS provides real-time, AI-driven income protection for gig workers against both predictable and unexpected disruptions. Here's exactly what your policy covers.
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '40px', background: 'white', padding: '60px', borderRadius: '32px', boxShadow: '0 20px 40px rgba(0,0,0,0.05)' }}>
+            
+            {/* What's Covered */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
+                <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '50%' }}>
+                  <CheckCircle size={28} color="#10b981" />
+                </div>
+                <h3 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0A1F2E', margin: 0 }}>What's Covered</h3>
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                {[
+                  { title: "Income Loss Due to Disruptions", desc: "AEGIS compensates for verified loss of earnings caused by events like heavy rain, strikes, or platform outages—calculated using real-time activity data." },
+                  { title: "Weather-Based Events", desc: "Coverage includes income disruption due to: Monsoons, Flooding, Extreme heat / AQI spikes, Storms and cyclones." },
+                  { title: "Civic & Man-Made Disruptions", desc: "We cover losses caused by: Strikes and protests, Road blockages, Government restrictions, Unexpected urban disruptions." },
+                  { title: "Platform Downtime Protection", desc: "If gig platforms face server crashes, order drops, or app outages—AEGIS ensures your income is still protected." },
+                  { title: "Fraud-Protected Claims", desc: "Spatial CNN detects fake movement & GPS spoofing. Temporal Transformer detects fraud networks. Only genuine claims are paid instantly." },
+                  { title: "Instant Payouts", desc: "Once a disruption is verified, claims are processed in under 90 seconds and money is directly credited to your UPI account." },
+                  { title: "Resilience Wallet Benefits", desc: "Unused premiums are not wasted: Converted into a Resilience Wallet, used for future coverage or free protection weeks." },
+                  { title: "Offline Protection (UX Trust Protocol)", desc: "Even if your network fails: Data is securely cached, synced later, and ensures fair payouts without penalties." }
+                ].map((item, idx) => (
+                  <div key={idx} style={{ display: 'flex', gap: '16px' }}>
+                    <div style={{ marginTop: '4px' }}>
+                      <CheckCircle2 size={24} color="#10b981" fill="#ecfdf5" style={{ borderRadius: '50%' }} />
+                    </div>
+                    <div>
+                      <h4 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#0A1F2E', marginBottom: '8px' }}>{item.title}</h4>
+                      <p style={{ fontSize: '1rem', color: '#5A7A8A', lineHeight: 1.6 }}>{item.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* What's Not Covered & Advantage */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
+                <div style={{ background: '#fef2f2', padding: '12px', borderRadius: '50%' }}>
+                  <AlertOctagon size={28} color="#ef4444" />
+                </div>
+                <h3 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0A1F2E', margin: 0 }}>What's Not Covered</h3>
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '50px' }}>
+                {[
+                  "Fake or manipulated activity (blocked by AI fraud engine)",
+                  "Voluntary inactivity (not working by choice)",
+                  "Non-verified income loss",
+                  "Device tampering or integrity violations"
+                ].map((item, idx) => (
+                  <div key={idx} style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                    <AlertOctagon size={20} color="#ef4444" />
+                    <span style={{ fontSize: '1.05rem', color: '#5A7A8A', fontWeight: 500 }}>{item}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background: 'linear-gradient(135deg, #FFC72C, #F59E0B)', borderRadius: '24px', padding: '32px', color: '#0f172a', boxShadow: '0 15px 30px rgba(245, 158, 11, 0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                  <Zap size={28} fill="currentColor" />
+                  <h3 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0 }}>AEGIS Advantage</h3>
+                </div>
+                <p style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '24px', opacity: 0.9 }}>Unlike traditional insurance:</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {[
+                    "Zero paperwork",
+                    "Zero delays",
+                    "Zero fraud leakage",
+                    "100% data-driven payouts"
+                  ].map((item, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <CheckCircle2 size={22} color="#0f172a" />
+                      <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 );
 
   const renderOnboarding = () => (
-    <div style={{ background: '#f8f9fa', minHeight: '100vh', padding: '40px 20px' }}>
-      <div className="container" style={{ maxWidth: '1200px' }}>
-        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
-            <Shield size={24} color="var(--primary)" /> AEGIS <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>| SECURE TRAILS</span>
-          </div>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-            AI-Powered Parametric Protection for Gig Economy Partners
-          </p>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '40px' }}>
-          {/* Left Side: Value Proposition */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
-            {/* Main Feature Card */}
-            <div className="card" style={{ background: 'white', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
-                <div style={{ position: 'relative', width: '200px', height: '120px', background: '#e2e8f0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ width: '40px', height: '40px', background: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
-                    <Activity size={20} fill="#ef4444" />
-                  </div>
-                  <div style={{ position: 'absolute', bottom: '12px', left: '12px', background: 'var(--accent-red)', color: 'white', fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px' }}>LIVE FEED</div>
-                </div>
-                <div>
-                  <h3 style={{ color: 'var(--accent-red)', fontSize: '1.1rem', marginBottom: '4px' }}>Signature Assure Shield</h3>
-                  <h2 style={{ fontSize: '1.8rem', marginBottom: '16px' }}>Protect Income with <br />Goal Assurance</h2>
-                </div>
-              </div>
-            </div>
-
-            {/* Pay/Get Card */}
-            <div className="card" style={{ background: 'white', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '32px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <img src="https://img.icons8.com/bubbles/100/000000/user-male.png" alt="Rider" style={{ width: '80px' }} />
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>Pay</span>
-                    <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--primary)' }}>₹40 p.w</span>
-                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>for active protection</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>Get</span>
-                    <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-green)' }}>₹1,500*</span>
-                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>instant payout @disruption</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Tax/Benefit Bar */}
-            <div style={{ background: 'rgba(0, 115, 152, 0.05)', padding: '12px 20px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px dashed var(--primary)' }}>
-              <Wallet size={20} color="var(--primary)" />
-              <span style={{ fontSize: '0.9rem', color: 'var(--primary)' }}>Get tax & platform benefits on premium paid u/s 80C & platform incentives</span>
-            </div>
-
-            {/* Benefits Section */}
-            <div>
-              <h3 style={{ marginBottom: '20px', fontWeight: 500 }}>Smart benefits for your family in your absence</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-                <div className="card" style={{ padding: '16px', textAlign: 'center', border: 'none', background: '#fff' }}>
-                  <ShieldCheck size={24} color="var(--primary)" style={{ marginBottom: '12px' }} />
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Life Cover</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>@ ₹12 Lakhs</div>
-                </div>
-                <div className="card" style={{ padding: '16px', textAlign: 'center', border: 'none', background: '#fff' }}>
-                  <CreditCard size={24} color="var(--primary)" style={{ marginBottom: '12px' }} />
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Premium waiver</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>up to ₹1.19 Lakh</div>
-                </div>
-                <div className="card" style={{ padding: '16px', textAlign: 'center', border: 'none', background: '#fff' }}>
-                  <CalendarClock size={24} color="var(--primary)" style={{ marginBottom: '12px' }} />
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Weekly income</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>up to ₹8,000</div>
-                </div>
-              </div>
-              <button className="btn" style={{ color: 'var(--primary)', background: 'transparent', padding: '12px 0', fontSize: '0.9rem', fontWeight: 600 }}>View all benefits &gt;</button>
-            </div>
-          </div>
-
-          {/* Right Side: Calculator Form */}
-          <div className="card" style={{ background: 'white', border: 'none', boxShadow: '0 8px 32px rgba(0,0,0,0.08)', padding: '0', borderRadius: '20px' }}>
-            <div style={{ background: '#003366', color: 'white', padding: '12px 24px', borderRadius: '20px 20px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>AEGIS calculator</span>
-              <span style={{ fontSize: '0.8rem' }}>Starts at just ₹25 p.w</span>
-            </div>
-
-            <form onSubmit={handleOnboardingSubmit} style={{ padding: '32px' }}>
-              <h3 style={{ marginBottom: '24px', fontSize: '1.2rem' }}>Aegis Shield Plan calculator</h3>
-
-              <div className="input-group">
-                <label className="input-label">Full Name</label>
-                <input type="text" className="input-field" placeholder="E.g., Rahul Kumar" required value={riderInfo.name} onChange={e => setRiderInfo({ ...riderInfo, name: e.target.value })} />
-              </div>
-
-              <div className="input-group">
-                <label className="input-label">Gender</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-                  {['Male', 'Female', 'Other'].map(g => (
-                    <button
-                      key={g}
-                      type="button"
-                      onClick={() => setRiderInfo({ ...riderInfo, gender: g })}
-                      style={{
-                        padding: '10px',
-                        borderRadius: '8px',
-                        border: '1px solid',
-                        borderColor: riderInfo.gender === g ? 'var(--primary)' : '#e2e8f0',
-                        background: riderInfo.gender === g ? 'var(--primary)' : 'white',
-                        color: riderInfo.gender === g ? 'white' : 'var(--text-main)',
-                        cursor: 'pointer',
-                        fontWeight: riderInfo.gender === g ? 600 : 400,
-                        fontSize: '0.9rem'
-                      }}
-                    >
-                      {g}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid-2">
-                <div className="input-group">
-                  <label className="input-label">Date of Birth</label>
-                  <input type="date" className="input-field" value={riderInfo.dob} onChange={e => setRiderInfo({ ...riderInfo, dob: e.target.value })} required />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Your Weekly Earning</label>
-                  <select className="input-field input-select" value={riderInfo.avgEarnings} onChange={e => setRiderInfo({ ...riderInfo, avgEarnings: Number(e.target.value) })}>
-                    <option value="1500">₹1,500 - ₹3,000</option>
-                    <option value="3000">₹3,000 - ₹5,000</option>
-                    <option value="5000">₹5,000 - ₹8,000</option>
-                    <option value="8000">₹8,000+</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid-2">
-                <div className="input-group">
-                  <label className="input-label">Mobile Number</label>
-                  <input type="tel" className="input-field" placeholder="10 digit mobile number" maxLength="10" minLength="10" pattern="[0-9]{10}" value={riderInfo.mobile} onChange={e => setRiderInfo({ ...riderInfo, mobile: e.target.value })} required />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Your Email ID</label>
-                  <input type="email" className="input-field" placeholder="Enter Your Email Id" value={riderInfo.email} onChange={e => setRiderInfo({ ...riderInfo, email: e.target.value })} />
-                </div>
-              </div>
-
-              <div className="grid-2">
-                <div className="input-group">
-                  <label className="input-label">Operating City</label>
-                  <select className="input-field input-select" value={riderInfo.city} onChange={e => setRiderInfo({ ...riderInfo, city: e.target.value })}>
-                    <option value="Mumbai">Mumbai</option>
-                    <option value="Delhi">Delhi</option>
-                    <option value="Bangalore">Bangalore</option>
-                    <option value="Hyderabad">Hyderabad</option>
-                  </select>
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Platform Partner</label>
-                  <select className="input-field input-select" value={riderInfo.platform} onChange={e => setRiderInfo({ ...riderInfo, platform: e.target.value })}>
-                    <option value="Zomato">Zomato</option>
-                    <option value="Swiggy">Swiggy</option>
-                    <option value="Zepto">Zepto</option>
-                    <option value="Blinkit">Blinkit</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', margin: '16px 0' }}>
-                <input type="checkbox" checked readOnly style={{ marginTop: '4px' }} />
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                  By submitting my details, I authorize Aegis Security and its representatives to contact me. I further consent to permit Aegis to process and share my information with third parties for risk assessment. <span style={{ color: 'var(--primary)' }}>View More</span>
-                </p>
-              </div>
-
-              <button type="submit" className="btn" style={{ width: '100%', background: 'var(--primary)', color: 'white', padding: '16px', borderRadius: '12px', fontSize: '1.1rem', fontWeight: 600, boxShadow: '0 4px 14px var(--glow-primary)' }}>
-                Let's Calculate Protection
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
+    <RegistrationFlow 
+      riderInfo={riderInfo}
+      setRiderInfo={setRiderInfo}
+      setWorkerId={setWorkerId}
+      setCurrentView={setCurrentView}
+      setCalculatedPremium={setCalculatedPremium}
+      setCoverageAmount={setCoverageAmount}
+      setRScore={setRScore}
+    />
   );
 
   const renderRiderDashboard = () => {
@@ -1099,25 +845,6 @@ export default function App() {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-        {showTermsModal && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ background: 'white', padding: '32px', borderRadius: '16px', maxWidth: '600px', width: '100%', color: '#333' }}>
-              <h2 style={{ color: '#00678a', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <ShieldAlert size={28} /> Aegis Legal Consent
-              </h2>
-              <div style={{ background: '#f8f9fa', padding: '16px', borderRadius: '8px', marginBottom: '24px', borderLeft: '4px solid #00678a' }}>
-                 <p style={{ fontSize: '0.9rem', marginBottom: '8px' }}><strong>1. Hardware Telemetry:</strong> I consent to Aegis accessing background sensors (accelerometer, thermal) for Zero-Trust fraud validation.</p>
-                 <p style={{ fontSize: '0.9rem', marginBottom: '8px' }}><strong>2. Force Majeure:</strong> I accept that payouts are suspended instantly during national macro-events (e.g., War, Pandemic).</p>
-                 <p style={{ fontSize: '0.9rem', marginBottom: '8px' }}><strong>3. Anti-Fraud Penalty:</strong> I accept that any GPS spoofing or syndicate behavior results in permanent ban and forfeiture of wallet balance.</p>
-                 <p style={{ fontSize: '0.9rem', marginBottom: '0' }}><strong>4. Income Constraint:</strong> I understand this policy *only* covers lost shift income, not medical or vehicle incidents.</p>
-              </div>
-              <div style={{ display: 'flex', gap: '16px', justifyContent: 'flex-end' }}>
-                <button className="btn btn-outline" onClick={() => setShowTermsModal(false)}>Decline</button>
-                <button className="btn btn-primary" onClick={confirmPolicy}>I Legally Consent</button>
-              </div>
-            </div>
-          </div>
-        )}
         {/* Guidewire DevTrails Header */}
         <header style={{ background: 'var(--header-bg)', color: 'white', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1179,29 +906,6 @@ export default function App() {
           </aside>
 
           <main className="main-content">
-            {circuitBreakerActive && (
-              <div style={{ background: '#fef2f2', border: '1px solid #f87171', color: '#b91c1c', padding: '16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <AlertOctagon size={24} />
-                <div>
-                  <h4 style={{ margin: 0, fontWeight: 700 }}>SYSTEM HALTED: MACRO-EVENT / FORCE MAJEURE ACTIVE</h4>
-                  <p style={{ margin: 0, fontSize: '0.9rem' }}>A Level-5 event (War/Pandemic) has been detected. All parametric payouts are frozen to protect capital liquidity.</p>
-                </div>
-              </div>
-            )}
-            {showNudge && (
-              <div style={{ background: '#fffbeb', border: '1px solid #fbbf24', color: '#d97706', padding: '16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <AlertTriangle size={24} />
-                  <div>
-                    <h4 style={{ margin: 0, fontWeight: 700 }}>SAFE-ZONE NUDGE</h4>
-                    <p style={{ margin: 0, fontSize: '0.9rem' }}>Severe waterlogging forming in your grid. Relocate to North Zone immediately to secure your income resilience score.</p>
-                  </div>
-                </div>
-                <button className="btn" style={{ background: '#d97706', color: 'white', padding: '8px 16px', fontSize: '0.85rem' }} onClick={handleNudgeCompliance}>
-                  I Have Relocated
-                </button>
-              </div>
-            )}
             {riderTab === 'overview' && (
               <>
                 <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
@@ -1300,7 +1004,6 @@ export default function App() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '16px' }} className="animate-slide-up delay-300">
                   <h3>Parametric Triggers</h3>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-outline" style={{ fontSize: '0.8rem', padding: '6px 12px', borderColor: '#d97706', color: '#d97706' }} onClick={() => setShowNudge(true)}>Test Nudge</button>
                     <button className="btn btn-outline" style={{ fontSize: '0.8rem', padding: '6px 12px' }} onClick={resetConditions}>Clear</button>
                     <button className="btn btn-outline" style={{ fontSize: '0.8rem', padding: '6px 12px', borderColor: 'var(--accent-red)', color: 'var(--accent-red)' }} onClick={simulateDisaster}>
                       Simulate Rainstorm
@@ -2509,24 +2212,24 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {adminData.claims && adminData.claims.length > 0 ? adminData.claims.map((claim, idx) => (
-                      <tr key={claim.id || idx} style={{ borderTop: idx > 0 ? '1px solid var(--card-border)' : 'none', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                        <td style={{ padding: '16px', fontWeight: 500 }}>CLM-{claim.id}</td>
-                        <td style={{ padding: '16px' }}>{claim.trigger_type}</td>
-                        <td style={{ padding: '16px', fontWeight: 600 }}>₹{claim.payout_amount}</td>
-                        <td style={{ padding: '16px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                            <span className={`badge ${claim.status === 'APPROVED' ? 'badge-green' : (claim.status === 'REJECTED' ? 'badge-red' : 'badge-orange')}`}>
-                               {claim.status}
-                            </span>
-                            {claim.fraud_score > 0 && <span style={{fontSize: '0.75rem', color: 'var(--accent-red)'}}>Risk Matrix: {claim.fraud_score}</span>}
-                            {claim.rejection_reason && <span style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>{claim.rejection_reason}</span>}
-                          </div>
-                        </td>
-                      </tr>
-                    )) : (
-                      <tr><td colSpan="4" style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>No live claims found in the local database.</td></tr>
-                    )}
+                    <tr>
+                      <td style={{ padding: '16px' }}>CLM-4921</td>
+                      <td style={{ padding: '16px' }}>Heavy Rain (&gt;50mm/hr)</td>
+                      <td style={{ padding: '16px' }}>₹1,200</td>
+                      <td style={{ padding: '16px' }}><span className="badge badge-green">Approved (Auto)</span></td>
+                    </tr>
+                    <tr style={{ borderTop: '1px solid var(--card-border)' }}>
+                      <td style={{ padding: '16px' }}>CLM-9912</td>
+                      <td style={{ padding: '16px' }}>Road Closure (Manual)</td>
+                      <td style={{ padding: '16px' }}>₹800</td>
+                      <td style={{ padding: '16px' }}><span className="badge badge-orange">Processing</span></td>
+                    </tr>
+                    <tr style={{ borderTop: '1px solid var(--card-border)' }}>
+                      <td style={{ padding: '16px' }}>CLM-1055</td>
+                      <td style={{ padding: '16px' }}>GPS Error (Manual)</td>
+                      <td style={{ padding: '16px' }}>₹600</td>
+                      <td style={{ padding: '16px' }}><span className="badge badge-red">Flagged</span></td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -2540,66 +2243,147 @@ export default function App() {
                 <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Suspicious activities flagged by AI Models for manual review.</p>
               </header>
               <div className="grid-2">
-                {adminData.claims && adminData.claims.filter(c => c.fraud_score > 0 || c.status === 'REJECTED').length > 0 ? (
-                  adminData.claims.filter(c => c.fraud_score > 0 || c.status === 'REJECTED').map((fraudClaim, idx) => (
-                    <div key={idx} className="card glass-panel" style={{ border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="badge badge-red">Risk Score: {fraudClaim.fraud_score}</span>
-                        <span>{fraudClaim.trigger_type}</span>
-                      </div>
-                      <div style={{ margin: '16px 0', fontSize: '0.9rem' }}>User <b>Worker ID: {fraudClaim.worker_id}</b> flagged. Reason: {fraudClaim.rejection_reason || fraudClaim.description}.</div>
-                      <button className="btn btn-primary" style={{ width: '100%', background: 'var(--accent-red)' }}>Hold Account & Investigate</button>
-                    </div>
-                  ))
-                ) : (
-                  <div className="card glass-panel" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '32px' }}>
-                     <ShieldAlert color="var(--accent-green)" size={48} style={{ margin: '0 auto 16px', display: 'block' }} />
-                     <h3>Zero Active Fraud Events</h3>
-                     <p style={{ color: 'var(--text-muted)' }}>The Zero-Trust engine is operating nominally across all network boundaries.</p>
+                <div className="card glass-panel" style={{ border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span className="badge badge-red">High Risk Flag</span>
+                    <span>GPS Spoofing Detected</span>
                   </div>
-                )}
+                  <div style={{ margin: '16px 0', fontSize: '0.9rem' }}>User <b>Rider_8912</b> claimed heavy rain payout while GPS telemetry indicates continuous interstate movement matching a high-speed train route.</div>
+                  <button className="btn btn-primary" style={{ width: '100%', background: 'var(--accent-red)' }}>Hold Account & Investigate</button>
+                </div>
+                <div className="card glass-panel" style={{ border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span className="badge badge-orange">Medium Risk Flag</span>
+                    <span>Abnormal Claim Frequency</span>
+                  </div>
+                  <div style={{ margin: '16px 0', fontSize: '0.9rem' }}>User <b>Rider_511</b> filed 4 consecutive manual claims for "Phone Battery Outage" just before shift completions. Needs history review.</div>
+                  <button className="btn btn-outline" style={{ width: '100%' }}>Assign to Manual Review Team</button>
+                </div>
               </div>
             </>
           )}
 
           {adminTab === 'policies' && (
             <>
-              <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Policy Management</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Configure weekly insurance plans and parametric limits.</p>
+              <header style={{ marginBottom: '24px' }}>
+                <h1 className="animate-slide-up">Policy Catalog Management</h1>
+                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Configure AI-powered dynamic pricing factors, coverage limits, and parametric triggers for each plan.</p>
               </header>
-              <div className="grid-3 animate-slide-up delay-200">
-                <div className="card glass-panel">
-                  <h3>Basic Plan</h3>
-                  <h2 style={{ margin: '16px 0', color: 'var(--primary)' }}>₹25 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ week</span></h2>
-                  <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                    <li>Max Payout: ₹800</li>
-                    <li>Rain & Heat Only</li>
-                    <li>48h Claim Processing</li>
-                  </ul>
-                  <button className="btn btn-outline" style={{ width: '100%' }}>Edit Plan</button>
+
+              {/* Pricing Model Summary Banner */}
+              <div className="card animate-slide-up delay-200" style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', color: 'white', marginBottom: '28px' }}>
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
+                  <BrainCircuit size={28} color="#FFC72C" />
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>AI Dynamic Pricing Formula</div>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>The pricing engine runs every Sunday at 23:59 for all active workers</div>
+                  </div>
                 </div>
-                <div className="card glass-panel" style={{ border: '1px solid var(--accent-green)' }}>
-                  <span className="badge badge-green" style={{ float: 'right' }}>Most Popular</span>
-                  <h3>Standard Plan</h3>
-                  <h2 style={{ margin: '16px 0', color: 'var(--primary)' }}>₹40 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ week</span></h2>
-                  <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                    <li>Max Payout: ₹1,500</li>
-                    <li>All Weather Triggers</li>
-                    <li>2h Claim Processing</li>
-                  </ul>
-                  <button className="btn btn-primary" style={{ width: '100%' }}>Edit Plan</button>
+                <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px', fontFamily: 'monospace', fontSize: '0.9rem', color: '#38bdf8', letterSpacing: '0.5px' }}>
+                  Pw = max( [E(L) × ZoneMult × WeatherMult × (1 + λ)] + γ - (R_score × β) - W_credit , P_floor )
                 </div>
-                <div className="card glass-panel">
-                  <h3>Premium Plan</h3>
-                  <h2 style={{ margin: '16px 0', color: 'var(--primary)' }}>₹85 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ week</span></h2>
-                  <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                    <li>Max Payout: ₹3,500</li>
-                    <li>All Triggers + Strikes</li>
-                    <li>Instant Payouts</li>
-                  </ul>
-                  <button className="btn btn-outline" style={{ width: '100%' }}>Edit Plan</button>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginTop: '16px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>E(L)</span> = Expected Loss (Coverage × base%)</div>
+                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>ZoneMult</span> = HazardHub flood history (0.85–1.6×)</div>
+                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>WeatherMult</span> = OpenWeatherMap 7-day forecast (0.92–1.35×)</div>
+                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>R_score × β</span> = Behavioral safety discount</div>
                 </div>
+              </div>
+
+              {/* Zone Risk Profiles */}
+              <div style={{ marginBottom: '28px' }} className="animate-slide-up delay-300">
+                <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}><Map size={20} color="var(--primary)" /> Zone Hyper-Local Risk Profiles (HazardHub)</h3>
+                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '1px solid var(--card-border)' }}>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Zone</th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Waterlogging Risk</th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Flood Incidents (3yr)</th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Risk Multiplier</th>
+                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Worker Insight</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.values(ZONE_RISK_PROFILES).map((z, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--card-border)' }}>
+                          <td style={{ padding: '14px 20px', fontWeight: 600 }}>{z.name}</td>
+                          <td style={{ padding: '14px 20px' }}>
+                            <span className={`badge ${z.waterloggingRisk === 'Critical' ? 'badge-red' : z.waterloggingRisk === 'High' ? 'badge-orange' : 'badge-green'}`}>{z.waterloggingRisk}</span>
+                          </td>
+                          <td style={{ padding: '14px 20px', fontWeight: 700, color: z.floodIncidents3yr > 10 ? 'var(--accent-red)' : z.floodIncidents3yr === 0 ? 'var(--accent-green)' : 'var(--accent-orange)' }}>{z.floodIncidents3yr}</td>
+                          <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontWeight: 600 }}>{z.riskMultiplier}×</td>
+                          <td style={{ padding: '14px 20px', fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: '300px' }}>{z.insight}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Policy Catalog Cards */}
+              <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }} className="animate-slide-up delay-300"><ShieldCheck size={20} color="var(--primary)" /> Policy Catalog ({POLICY_CATALOG.length} Plans)</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px' }} className="animate-slide-up delay-300">
+                {POLICY_CATALOG.map(policy => {
+                  const samplePricing = computeDynamicPremium(policy, 'z1', 90, 0, 25);
+                  return (
+                    <div key={policy.id} className="card" style={{ borderTop: `4px solid ${policy.color}`, position: 'relative' }}>
+                      {policy.badge && (
+                        <div style={{ position: 'absolute', top: '16px', right: '16px', background: policy.color, color: 'white', fontSize: '0.7rem', fontWeight: 700, padding: '3px 10px', borderRadius: '12px' }}>{policy.badge}</div>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                        <div style={{ background: policy.accentColor, padding: '10px', borderRadius: '10px' }}><Shield size={22} color={policy.color} /></div>
+                        <div>
+                          <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>{policy.name}</div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{policy.tagline}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Base Price</div>
+                          <div style={{ fontWeight: 700, fontSize: '1.2rem', color: policy.color }}>₹{policy.basePrice}/wk</div>
+                        </div>
+                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Max Coverage</div>
+                          <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>₹{policy.coverage.toLocaleString()}</div>
+                        </div>
+                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Coverage Hours</div>
+                          <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>{policy.coverageHours}h/day</div>
+                        </div>
+                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sample Price (High-Risk Zone)</div>
+                          <div style={{ fontWeight: 700, fontSize: '1.2rem', color: '#ef4444' }}>₹{samplePricing.finalPremium}/wk</div>
+                        </div>
+                      </div>
+
+                      {/* Pricing Factors */}
+                      <div style={{ background: 'rgba(0,0,0,0.02)', borderRadius: '10px', padding: '12px', marginBottom: '14px', fontSize: '0.78rem' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>AI Pricing Parameters</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', color: 'var(--text-muted)' }}>
+                          <span>E(L) base: <b style={{ color: 'var(--text-main)' }}>{(policy.pricingFactors.expectedLossBase * 100).toFixed(1)}%</b></span>
+                          <span>λ (risk margin): <b style={{ color: 'var(--text-main)' }}>{(policy.pricingFactors.lambda * 100).toFixed(0)}%</b></span>
+                          <span>γ (OpEx): <b style={{ color: 'var(--text-main)' }}>₹{policy.pricingFactors.gamma}</b></span>
+                          <span>R-score β: <b style={{ color: 'var(--text-main)' }}>{policy.pricingFactors.rScoreBeta}</b></span>
+                        </div>
+                      </div>
+
+                      {/* Triggers */}
+                      <div style={{ marginBottom: '14px' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>Parametric Triggers</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                          {policy.triggers.map((t, i) => <span key={i} style={{ background: policy.accentColor, color: policy.color, border: `1px solid ${policy.color}30`, borderRadius: '6px', padding: '2px 8px', fontSize: '0.72rem', fontWeight: 600 }}>{t}</span>)}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <button className="btn btn-outline" style={{ flex: 1, fontSize: '0.85rem' }}>Edit Pricing Factors</button>
+                        <button className="btn" style={{ flex: 1, background: policy.color, color: 'white', border: 'none', fontSize: '0.85rem' }}>Toggle Active</button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
@@ -2610,31 +2394,32 @@ export default function App() {
                 <h1 className="animate-slide-up">Payout Monitoring</h1>
                 <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Track automated transparency and financial outflows.</p>
               </header>
-              <div className="table-container card glass-panel">
+              <div className="card glass-panel">
                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'rgba(0,0,0,0.03)' }}>
-                      <th style={{ padding: '12px' }}>Worker ID</th>
-                      <th style={{ padding: '12px' }}>Disruption Cause</th>
+                      <th style={{ padding: '12px' }}>Date</th>
+                      <th style={{ padding: '12px' }}>Cause</th>
                       <th style={{ padding: '12px' }}>Amount</th>
                       <th style={{ padding: '12px' }}>Bank Ref</th>
                       <th style={{ padding: '12px' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {adminData.claims && adminData.claims.filter(c => c.status === 'APPROVED').length > 0 ? (
-                       adminData.claims.filter(c => c.status === 'APPROVED').map((claim, idx) => (
-                         <tr key={idx} style={{ borderTop: idx > 0 ? '1px solid var(--card-border)' : 'none' }}>
-                           <td style={{ padding: '12px', fontSize: '0.9rem' }}>WRK-{claim.worker_id}</td>
-                           <td style={{ padding: '12px', fontSize: '0.9rem' }}>{claim.trigger_type}</td>
-                           <td style={{ padding: '12px', fontWeight: 600 }}>₹{claim.payout_amount}</td>
-                           <td style={{ padding: '12px', fontFamily: 'monospace' }}>UPI-AEGIS-{claim.id}</td>
-                           <td style={{ padding: '12px' }}><span className="badge badge-green">Success</span></td>
-                         </tr>
-                       ))
-                    ) : (
-                       <tr><td colSpan="5" style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>No live payouts recorded in local ledger.</td></tr>
-                    )}
+                    <tr>
+                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Today, 2:40 PM</td>
+                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Downtown Flood</td>
+                      <td style={{ padding: '12px', fontWeight: 600 }}>₹1,500</td>
+                      <td style={{ padding: '12px', fontFamily: 'monospace' }}>UPI-0092A</td>
+                      <td style={{ padding: '12px' }}><span className="badge badge-green">Success</span></td>
+                    </tr>
+                    <tr style={{ borderTop: '1px solid var(--card-border)' }}>
+                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Today, 1:15 PM</td>
+                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Downtown Flood</td>
+                      <td style={{ padding: '12px', fontWeight: 600 }}>₹1,500</td>
+                      <td style={{ padding: '12px', fontFamily: 'monospace' }}>NEFT-90X</td>
+                      <td style={{ padding: '12px' }}><span className="badge badge-red">Failed</span></td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -2675,23 +2460,19 @@ export default function App() {
               </header>
               <div className="card glass-panel" style={{ textAlign: 'center', padding: '40px' }}>
                 <TrendingDown size={48} color="var(--primary)" style={{ marginBottom: '16px' }} />
-                <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Live Capital Loss Ratio</div>
-                <h1 style={{ fontSize: '3rem', color: 'var(--text-main)', marginBottom: '16px' }}>
-                  {adminData.policies && adminData.policies.reduce((acc, pol) => acc + pol.premium_paid, 0) > 0 ?
-                    ((adminData.claims.filter(c => c.status === 'APPROVED').reduce((acc, claim) => acc + claim.payout_amount, 0) / adminData.policies.reduce((acc, pol) => acc + pol.premium_paid, 0)) * 100).toFixed(1)
-                  : 0}%
-                </h1>
+                <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Current Weekly Loss Ratio</div>
+                <h1 style={{ fontSize: '3rem', color: 'var(--text-main)', marginBottom: '16px' }}>64.2%</h1>
                 <p style={{ maxWidth: '600px', margin: '0 auto', color: 'var(--text-muted)' }}>
-                  This reflects the literal payout ratios computed dynamically from the `aegis.db` ledger. For every ₹100 collected in premiums, this ratio shows how much capital is flowing out as parametric payouts.
+                  This means for every ₹100 collected in premiums, ₹64.20 is being paid out in parametric claims. The model target is 65%, indicating the current pricing structure is highly sustainable.
                 </p>
                 <div style={{ marginTop: '32px', display: 'flex', justifyContent: 'center', gap: '32px' }}>
                   <div>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Premiums (Database)</div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹{adminData.policies ? adminData.policies.reduce((acc, pol) => acc + pol.premium_paid, 0).toLocaleString() : 0}</div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Premiums (Week)</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹4,98,050</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Payouts (Database)</div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹{adminData.claims ? adminData.claims.filter(c => c.status === 'APPROVED').reduce((acc, claim) => acc + claim.payout_amount, 0).toLocaleString() : 0}</div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Payouts (Week)</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹3,19,748</div>
                   </div>
                 </div>
               </div>
@@ -2705,10 +2486,10 @@ export default function App() {
                 <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Statistics and demographics about insured delivery workers.</p>
               </header>
               <div className="grid-4">
-                <div className="card"><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Total Insured</div><h2 style={{ marginTop: '8px' }}>{adminData.workers ? adminData.workers.length.toLocaleString() : 0}</h2></div>
-                <div className="card" style={{ borderLeft: '4px solid var(--accent-orange)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>High-Risk Workers</div><h2 style={{ marginTop: '8px' }}>{adminData.workers ? adminData.workers.filter(w => w.risk_score < 50).length.toLocaleString() : 0}</h2></div>
-                <div className="card" style={{ borderLeft: '4px solid var(--accent-red)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Fraud Flags</div><h2 style={{ marginTop: '8px' }}>{adminData.claims ? adminData.claims.filter(c => c.fraud_score > 50).length.toLocaleString() : 0}</h2></div>
-                <div className="card" style={{ borderLeft: '4px solid var(--accent-green)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Zero Claim Workers</div><h2 style={{ marginTop: '8px' }}>{adminData.workers ? adminData.workers.filter(w => !adminData.claims?.find(c => c.worker_id === w.id)).length.toLocaleString() : 0}</h2></div>
+                <div className="card"><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Total Insured</div><h2 style={{ marginTop: '8px' }}>24,910</h2></div>
+                <div className="card" style={{ borderLeft: '4px solid var(--accent-orange)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>High-Risk Workers</div><h2 style={{ marginTop: '8px' }}>1,420</h2></div>
+                <div className="card" style={{ borderLeft: '4px solid var(--accent-red)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Frequent Claimers</div><h2 style={{ marginTop: '8px' }}>85</h2></div>
+                <div className="card" style={{ borderLeft: '4px solid var(--accent-green)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Zero Claim Workers</div><h2 style={{ marginTop: '8px' }}>19,500</h2></div>
               </div>
             </>
           )}
@@ -2720,13 +2501,13 @@ export default function App() {
                 <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Active API endpoints generating parametric truths.</p>
               </header>
               <div className="grid-3">
-                {['Heavy Rain (>50mm/hr)', 'Extreme Heat (>45°C)', 'Government Lockdown', 'Air Quality (AQI > 400)', 'Road Network Failure', 'Cellular Outage'].map((condition, idx) => (
+                {PREDEFINED_TRIGGERS.map((t, idx) => (
                   <div key={idx} className="card glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <div style={{ padding: '12px', background: 'rgba(0,115,152,0.1)', borderRadius: '12px', color: 'var(--primary)' }}>
-                      <Activity size={24} />
+                      {t.icon}
                     </div>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>{condition}</div>
+                      <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>{t.condition}</div>
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                         <div style={{ width: 8, height: 8, background: 'var(--accent-green)', borderRadius: '50%' }}></div> Polling Every 60s
                       </div>
@@ -2746,10 +2527,31 @@ export default function App() {
               <div className="grid-2">
                 <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h3 style={{ marginBottom: '4px' }}>Full Immutable Ledger Export (JSON)</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Downloads the complete SQLite dataset representing all Workers, Claims, and Policies directly to your machine.</p>
+                    <h3 style={{ marginBottom: '4px' }}>Weekly Claims Report</h3>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>All processed constraints & amounts.</p>
                   </div>
-                  <button onClick={downloadSQLiteDump} className="btn btn-primary" style={{ display: 'flex', gap: '8px', cursor: 'pointer' }}><Download size={16} /> JSON DUMP</button>
+                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> CSV</button>
+                </div>
+                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 style={{ marginBottom: '4px' }}>Fraud Investigation Log</h3>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Suspicious telemetry trails flagged.</p>
+                  </div>
+                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> Excel</button>
+                </div>
+                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 style={{ marginBottom: '4px' }}>Disruption Impact Analysis</h3>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Geographical breakdown of loss.</p>
+                  </div>
+                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> PDF</button>
+                </div>
+                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 style={{ marginBottom: '4px' }}>Monthly Payout Ledger</h3>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Cross-referenced banking transcripts.</p>
+                  </div>
+                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> Excel</button>
                 </div>
               </div>
             </>
