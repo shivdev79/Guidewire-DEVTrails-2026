@@ -180,6 +180,10 @@ export default function App() {
   const [coverageAmount, setCoverageAmount] = useState(0);
   const [calculatedPremium, setCalculatedPremium] = useState(0);
   
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [circuitBreakerActive, setCircuitBreakerActive] = useState(false);
+  const [showNudge, setShowNudge] = useState(false);
+  
   const [claims, setClaims] = useState([]);
   const [riderTab, setRiderTab] = useState('overview');
   const [adminTab, setAdminTab] = useState('overview');
@@ -188,17 +192,64 @@ export default function App() {
   const [activatedPlan, setActivatedPlan] = useState(null);
   const [showPricingBreakdown, setShowPricingBreakdown] = useState(null); // policy.id or null
 
-  const handleManualClaimSubmit = (e) => {
+  const [adminData, setAdminData] = useState({ workers: [], policies: [], claims: [], metrics: {} });
+  
+  useEffect(() => {
+    if (currentView === 'admin-dash') {
+      const fetchAdminData = async () => {
+        try {
+          const res = await axios.get(`${API_BASE_URL}/admin/ledger`);
+          setAdminData(res.data);
+        } catch (e) {
+          console.error("Admin data fetch error", e);
+        }
+      };
+      fetchAdminData();
+      const interval = setInterval(fetchAdminData, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [currentView]);
+
+  const downloadSQLiteDump = () => {
+    const filename = 'aegis_ledger_dump.json';
+    const jsonStr = JSON.stringify(adminData, null, 2);
+    let element = document.createElement('a');
+    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(jsonStr));
+    element.setAttribute('download', filename);
+    element.style.display = 'none';
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
+  const handleManualClaimSubmit = async (e) => {
     e.preventDefault();
-    setClaims(prev => [{
-      id: 'CLM-' + Math.floor(Math.random() * 100000),
-      date: new Date().toLocaleDateString(),
-      reason: manualClaim.reason + ' (Manual Claim)',
-      amount: manualClaim.amount || Math.round(riderInfo.avgEarnings * 0.4),
-      status: 'Pending Review'
-    }, ...prev]);
-    setManualClaim({ reason: 'Rain', description: '', amount: '' });
-    setRiderTab('overview');
+    if (!workerId) return;
+    try {
+      await axios.post(`${API_BASE_URL}/claim/manual`, {
+         worker_id: workerId,
+         reason: manualClaim.reason,
+         description: manualClaim.description,
+         amount: Number(manualClaim.amount || Math.round(riderInfo.avgEarnings * 0.4))
+      });
+      alert("Manual Claim Submitted for Review!");
+      setManualClaim({ reason: 'Rain', description: '', amount: '' });
+      setRiderTab('overview');
+    } catch (err) {
+      console.error(err);
+      alert("Failed submitting manual claim.");
+    }
+  };
+
+  const handleNudgeCompliance = async () => {
+    setShowNudge(false);
+    if (!workerId) return;
+    try {
+       const res = await axios.post(`${API_BASE_URL}/simulate-rebate/${workerId}`);
+       alert(res.data.message);
+    } catch (e) {
+       console.error("Rebate error", e);
+    }
   };
 
   // Global condition simulator
@@ -235,6 +286,11 @@ export default function App() {
         try {
           const res = await axios.get(`${API_BASE_URL}/worker/${workerId}/dashboard`);
           const data = res.data;
+          
+          if (data.system_status) {
+            setCircuitBreakerActive(data.system_status.circuit_breaker_active);
+          }
+          
           if (data.active_policy) {
             setHasActivePolicy(true);
             setCoverageAmount(data.active_policy.coverage_amount);
@@ -294,17 +350,24 @@ export default function App() {
     }
   };
 
-  const initiatePolicy = async () => {
+  const initiatePolicy = () => {
     if (!workerId) return;
+    setShowTermsModal(true);
+  };
+
+  const confirmPolicy = async () => {
     try {
        const tier = riderInfo.avgEarnings > 5000 ? 'Elite' : (riderInfo.avgEarnings > 3000 ? 'Pro' : 'Base');
        await axios.post(`${API_BASE_URL}/create-policy`, {
          worker_id: workerId,
-         tier: tier
+         tier: tier,
+         accepted_terms: true
        });
        setHasActivePolicy(true);
+       setShowTermsModal(false);
     } catch (e) {
        console.error("Failed to create policy", e);
+       alert("Failed to create policy: " + (e.response?.data?.detail || e.message));
     }
   };
 
@@ -967,7 +1030,7 @@ export default function App() {
               <div className="grid-2">
                 <div className="input-group">
                   <label className="input-label">Date of Birth</label>
-                  <input type="text" className="input-field" placeholder="DD/MM/YYYY" value={riderInfo.dob} onChange={e => setRiderInfo({ ...riderInfo, dob: e.target.value })} />
+                  <input type="date" className="input-field" value={riderInfo.dob} onChange={e => setRiderInfo({ ...riderInfo, dob: e.target.value })} required />
                 </div>
                 <div className="input-group">
                   <label className="input-label">Your Weekly Earning</label>
@@ -983,7 +1046,7 @@ export default function App() {
               <div className="grid-2">
                 <div className="input-group">
                   <label className="input-label">Mobile Number</label>
-                  <input type="text" className="input-field" placeholder="10 digit mobile number" value={riderInfo.mobile} onChange={e => setRiderInfo({ ...riderInfo, mobile: e.target.value })} />
+                  <input type="tel" className="input-field" placeholder="10 digit mobile number" maxLength="10" minLength="10" pattern="[0-9]{10}" value={riderInfo.mobile} onChange={e => setRiderInfo({ ...riderInfo, mobile: e.target.value })} required />
                 </div>
                 <div className="input-group">
                   <label className="input-label">Your Email ID</label>
@@ -1036,6 +1099,25 @@ export default function App() {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        {showTermsModal && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: 'white', padding: '32px', borderRadius: '16px', maxWidth: '600px', width: '100%', color: '#333' }}>
+              <h2 style={{ color: '#00678a', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShieldAlert size={28} /> Aegis Legal Consent
+              </h2>
+              <div style={{ background: '#f8f9fa', padding: '16px', borderRadius: '8px', marginBottom: '24px', borderLeft: '4px solid #00678a' }}>
+                 <p style={{ fontSize: '0.9rem', marginBottom: '8px' }}><strong>1. Hardware Telemetry:</strong> I consent to Aegis accessing background sensors (accelerometer, thermal) for Zero-Trust fraud validation.</p>
+                 <p style={{ fontSize: '0.9rem', marginBottom: '8px' }}><strong>2. Force Majeure:</strong> I accept that payouts are suspended instantly during national macro-events (e.g., War, Pandemic).</p>
+                 <p style={{ fontSize: '0.9rem', marginBottom: '8px' }}><strong>3. Anti-Fraud Penalty:</strong> I accept that any GPS spoofing or syndicate behavior results in permanent ban and forfeiture of wallet balance.</p>
+                 <p style={{ fontSize: '0.9rem', marginBottom: '0' }}><strong>4. Income Constraint:</strong> I understand this policy *only* covers lost shift income, not medical or vehicle incidents.</p>
+              </div>
+              <div style={{ display: 'flex', gap: '16px', justifyContent: 'flex-end' }}>
+                <button className="btn btn-outline" onClick={() => setShowTermsModal(false)}>Decline</button>
+                <button className="btn btn-primary" onClick={confirmPolicy}>I Legally Consent</button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Guidewire DevTrails Header */}
         <header style={{ background: 'var(--header-bg)', color: 'white', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1097,6 +1179,29 @@ export default function App() {
           </aside>
 
           <main className="main-content">
+            {circuitBreakerActive && (
+              <div style={{ background: '#fef2f2', border: '1px solid #f87171', color: '#b91c1c', padding: '16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <AlertOctagon size={24} />
+                <div>
+                  <h4 style={{ margin: 0, fontWeight: 700 }}>SYSTEM HALTED: MACRO-EVENT / FORCE MAJEURE ACTIVE</h4>
+                  <p style={{ margin: 0, fontSize: '0.9rem' }}>A Level-5 event (War/Pandemic) has been detected. All parametric payouts are frozen to protect capital liquidity.</p>
+                </div>
+              </div>
+            )}
+            {showNudge && (
+              <div style={{ background: '#fffbeb', border: '1px solid #fbbf24', color: '#d97706', padding: '16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <AlertTriangle size={24} />
+                  <div>
+                    <h4 style={{ margin: 0, fontWeight: 700 }}>SAFE-ZONE NUDGE</h4>
+                    <p style={{ margin: 0, fontSize: '0.9rem' }}>Severe waterlogging forming in your grid. Relocate to North Zone immediately to secure your income resilience score.</p>
+                  </div>
+                </div>
+                <button className="btn" style={{ background: '#d97706', color: 'white', padding: '8px 16px', fontSize: '0.85rem' }} onClick={handleNudgeCompliance}>
+                  I Have Relocated
+                </button>
+              </div>
+            )}
             {riderTab === 'overview' && (
               <>
                 <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
@@ -1195,6 +1300,7 @@ export default function App() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '16px' }} className="animate-slide-up delay-300">
                   <h3>Parametric Triggers</h3>
                   <div style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-outline" style={{ fontSize: '0.8rem', padding: '6px 12px', borderColor: '#d97706', color: '#d97706' }} onClick={() => setShowNudge(true)}>Test Nudge</button>
                     <button className="btn btn-outline" style={{ fontSize: '0.8rem', padding: '6px 12px' }} onClick={resetConditions}>Clear</button>
                     <button className="btn btn-outline" style={{ fontSize: '0.8rem', padding: '6px 12px', borderColor: 'var(--accent-red)', color: 'var(--accent-red)' }} onClick={simulateDisaster}>
                       Simulate Rainstorm
@@ -2403,24 +2509,24 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td style={{ padding: '16px' }}>CLM-4921</td>
-                      <td style={{ padding: '16px' }}>Heavy Rain (&gt;50mm/hr)</td>
-                      <td style={{ padding: '16px' }}>₹1,200</td>
-                      <td style={{ padding: '16px' }}><span className="badge badge-green">Approved (Auto)</span></td>
-                    </tr>
-                    <tr style={{ borderTop: '1px solid var(--card-border)' }}>
-                      <td style={{ padding: '16px' }}>CLM-9912</td>
-                      <td style={{ padding: '16px' }}>Road Closure (Manual)</td>
-                      <td style={{ padding: '16px' }}>₹800</td>
-                      <td style={{ padding: '16px' }}><span className="badge badge-orange">Processing</span></td>
-                    </tr>
-                    <tr style={{ borderTop: '1px solid var(--card-border)' }}>
-                      <td style={{ padding: '16px' }}>CLM-1055</td>
-                      <td style={{ padding: '16px' }}>GPS Error (Manual)</td>
-                      <td style={{ padding: '16px' }}>₹600</td>
-                      <td style={{ padding: '16px' }}><span className="badge badge-red">Flagged</span></td>
-                    </tr>
+                    {adminData.claims && adminData.claims.length > 0 ? adminData.claims.map((claim, idx) => (
+                      <tr key={claim.id || idx} style={{ borderTop: idx > 0 ? '1px solid var(--card-border)' : 'none', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                        <td style={{ padding: '16px', fontWeight: 500 }}>CLM-{claim.id}</td>
+                        <td style={{ padding: '16px' }}>{claim.trigger_type}</td>
+                        <td style={{ padding: '16px', fontWeight: 600 }}>₹{claim.payout_amount}</td>
+                        <td style={{ padding: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                            <span className={`badge ${claim.status === 'APPROVED' ? 'badge-green' : (claim.status === 'REJECTED' ? 'badge-red' : 'badge-orange')}`}>
+                               {claim.status}
+                            </span>
+                            {claim.fraud_score > 0 && <span style={{fontSize: '0.75rem', color: 'var(--accent-red)'}}>Risk Matrix: {claim.fraud_score}</span>}
+                            {claim.rejection_reason && <span style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>{claim.rejection_reason}</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan="4" style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>No live claims found in the local database.</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -2434,147 +2540,66 @@ export default function App() {
                 <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Suspicious activities flagged by AI Models for manual review.</p>
               </header>
               <div className="grid-2">
-                <div className="card glass-panel" style={{ border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span className="badge badge-red">High Risk Flag</span>
-                    <span>GPS Spoofing Detected</span>
+                {adminData.claims && adminData.claims.filter(c => c.fraud_score > 0 || c.status === 'REJECTED').length > 0 ? (
+                  adminData.claims.filter(c => c.fraud_score > 0 || c.status === 'REJECTED').map((fraudClaim, idx) => (
+                    <div key={idx} className="card glass-panel" style={{ border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span className="badge badge-red">Risk Score: {fraudClaim.fraud_score}</span>
+                        <span>{fraudClaim.trigger_type}</span>
+                      </div>
+                      <div style={{ margin: '16px 0', fontSize: '0.9rem' }}>User <b>Worker ID: {fraudClaim.worker_id}</b> flagged. Reason: {fraudClaim.rejection_reason || fraudClaim.description}.</div>
+                      <button className="btn btn-primary" style={{ width: '100%', background: 'var(--accent-red)' }}>Hold Account & Investigate</button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="card glass-panel" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '32px' }}>
+                     <ShieldAlert color="var(--accent-green)" size={48} style={{ margin: '0 auto 16px', display: 'block' }} />
+                     <h3>Zero Active Fraud Events</h3>
+                     <p style={{ color: 'var(--text-muted)' }}>The Zero-Trust engine is operating nominally across all network boundaries.</p>
                   </div>
-                  <div style={{ margin: '16px 0', fontSize: '0.9rem' }}>User <b>Rider_8912</b> claimed heavy rain payout while GPS telemetry indicates continuous interstate movement matching a high-speed train route.</div>
-                  <button className="btn btn-primary" style={{ width: '100%', background: 'var(--accent-red)' }}>Hold Account & Investigate</button>
-                </div>
-                <div className="card glass-panel" style={{ border: '1px solid rgba(245, 158, 11, 0.3)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span className="badge badge-orange">Medium Risk Flag</span>
-                    <span>Abnormal Claim Frequency</span>
-                  </div>
-                  <div style={{ margin: '16px 0', fontSize: '0.9rem' }}>User <b>Rider_511</b> filed 4 consecutive manual claims for "Phone Battery Outage" just before shift completions. Needs history review.</div>
-                  <button className="btn btn-outline" style={{ width: '100%' }}>Assign to Manual Review Team</button>
-                </div>
+                )}
               </div>
             </>
           )}
 
           {adminTab === 'policies' && (
             <>
-              <header style={{ marginBottom: '24px' }}>
-                <h1 className="animate-slide-up">Policy Catalog Management</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Configure AI-powered dynamic pricing factors, coverage limits, and parametric triggers for each plan.</p>
+              <header style={{ marginBottom: '32px' }}>
+                <h1 className="animate-slide-up">Policy Management</h1>
+                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Configure weekly insurance plans and parametric limits.</p>
               </header>
-
-              {/* Pricing Model Summary Banner */}
-              <div className="card animate-slide-up delay-200" style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', color: 'white', marginBottom: '28px' }}>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
-                  <BrainCircuit size={28} color="#FFC72C" />
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>AI Dynamic Pricing Formula</div>
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>The pricing engine runs every Sunday at 23:59 for all active workers</div>
-                  </div>
+              <div className="grid-3 animate-slide-up delay-200">
+                <div className="card glass-panel">
+                  <h3>Basic Plan</h3>
+                  <h2 style={{ margin: '16px 0', color: 'var(--primary)' }}>₹25 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ week</span></h2>
+                  <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    <li>Max Payout: ₹800</li>
+                    <li>Rain & Heat Only</li>
+                    <li>48h Claim Processing</li>
+                  </ul>
+                  <button className="btn btn-outline" style={{ width: '100%' }}>Edit Plan</button>
                 </div>
-                <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px', fontFamily: 'monospace', fontSize: '0.9rem', color: '#38bdf8', letterSpacing: '0.5px' }}>
-                  Pw = max( [E(L) × ZoneMult × WeatherMult × (1 + λ)] + γ - (R_score × β) - W_credit , P_floor )
+                <div className="card glass-panel" style={{ border: '1px solid var(--accent-green)' }}>
+                  <span className="badge badge-green" style={{ float: 'right' }}>Most Popular</span>
+                  <h3>Standard Plan</h3>
+                  <h2 style={{ margin: '16px 0', color: 'var(--primary)' }}>₹40 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ week</span></h2>
+                  <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    <li>Max Payout: ₹1,500</li>
+                    <li>All Weather Triggers</li>
+                    <li>2h Claim Processing</li>
+                  </ul>
+                  <button className="btn btn-primary" style={{ width: '100%' }}>Edit Plan</button>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginTop: '16px', fontSize: '0.8rem', color: '#94a3b8' }}>
-                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>E(L)</span> = Expected Loss (Coverage × base%)</div>
-                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>ZoneMult</span> = HazardHub flood history (0.85–1.6×)</div>
-                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>WeatherMult</span> = OpenWeatherMap 7-day forecast (0.92–1.35×)</div>
-                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>R_score × β</span> = Behavioral safety discount</div>
+                <div className="card glass-panel">
+                  <h3>Premium Plan</h3>
+                  <h2 style={{ margin: '16px 0', color: 'var(--primary)' }}>₹85 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ week</span></h2>
+                  <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    <li>Max Payout: ₹3,500</li>
+                    <li>All Triggers + Strikes</li>
+                    <li>Instant Payouts</li>
+                  </ul>
+                  <button className="btn btn-outline" style={{ width: '100%' }}>Edit Plan</button>
                 </div>
-              </div>
-
-              {/* Zone Risk Profiles */}
-              <div style={{ marginBottom: '28px' }} className="animate-slide-up delay-300">
-                <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}><Map size={20} color="var(--primary)" /> Zone Hyper-Local Risk Profiles (HazardHub)</h3>
-                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '1px solid var(--card-border)' }}>
-                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Zone</th>
-                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Waterlogging Risk</th>
-                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Flood Incidents (3yr)</th>
-                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Risk Multiplier</th>
-                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Worker Insight</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.values(ZONE_RISK_PROFILES).map((z, i) => (
-                        <tr key={i} style={{ borderBottom: '1px solid var(--card-border)' }}>
-                          <td style={{ padding: '14px 20px', fontWeight: 600 }}>{z.name}</td>
-                          <td style={{ padding: '14px 20px' }}>
-                            <span className={`badge ${z.waterloggingRisk === 'Critical' ? 'badge-red' : z.waterloggingRisk === 'High' ? 'badge-orange' : 'badge-green'}`}>{z.waterloggingRisk}</span>
-                          </td>
-                          <td style={{ padding: '14px 20px', fontWeight: 700, color: z.floodIncidents3yr > 10 ? 'var(--accent-red)' : z.floodIncidents3yr === 0 ? 'var(--accent-green)' : 'var(--accent-orange)' }}>{z.floodIncidents3yr}</td>
-                          <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontWeight: 600 }}>{z.riskMultiplier}×</td>
-                          <td style={{ padding: '14px 20px', fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: '300px' }}>{z.insight}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Policy Catalog Cards */}
-              <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }} className="animate-slide-up delay-300"><ShieldCheck size={20} color="var(--primary)" /> Policy Catalog ({POLICY_CATALOG.length} Plans)</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px' }} className="animate-slide-up delay-300">
-                {POLICY_CATALOG.map(policy => {
-                  const samplePricing = computeDynamicPremium(policy, 'z1', 90, 0, 25);
-                  return (
-                    <div key={policy.id} className="card" style={{ borderTop: `4px solid ${policy.color}`, position: 'relative' }}>
-                      {policy.badge && (
-                        <div style={{ position: 'absolute', top: '16px', right: '16px', background: policy.color, color: 'white', fontSize: '0.7rem', fontWeight: 700, padding: '3px 10px', borderRadius: '12px' }}>{policy.badge}</div>
-                      )}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                        <div style={{ background: policy.accentColor, padding: '10px', borderRadius: '10px' }}><Shield size={22} color={policy.color} /></div>
-                        <div>
-                          <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>{policy.name}</div>
-                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{policy.tagline}</div>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Base Price</div>
-                          <div style={{ fontWeight: 700, fontSize: '1.2rem', color: policy.color }}>₹{policy.basePrice}/wk</div>
-                        </div>
-                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Max Coverage</div>
-                          <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>₹{policy.coverage.toLocaleString()}</div>
-                        </div>
-                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Coverage Hours</div>
-                          <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>{policy.coverageHours}h/day</div>
-                        </div>
-                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sample Price (High-Risk Zone)</div>
-                          <div style={{ fontWeight: 700, fontSize: '1.2rem', color: '#ef4444' }}>₹{samplePricing.finalPremium}/wk</div>
-                        </div>
-                      </div>
-
-                      {/* Pricing Factors */}
-                      <div style={{ background: 'rgba(0,0,0,0.02)', borderRadius: '10px', padding: '12px', marginBottom: '14px', fontSize: '0.78rem' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>AI Pricing Parameters</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', color: 'var(--text-muted)' }}>
-                          <span>E(L) base: <b style={{ color: 'var(--text-main)' }}>{(policy.pricingFactors.expectedLossBase * 100).toFixed(1)}%</b></span>
-                          <span>λ (risk margin): <b style={{ color: 'var(--text-main)' }}>{(policy.pricingFactors.lambda * 100).toFixed(0)}%</b></span>
-                          <span>γ (OpEx): <b style={{ color: 'var(--text-main)' }}>₹{policy.pricingFactors.gamma}</b></span>
-                          <span>R-score β: <b style={{ color: 'var(--text-main)' }}>{policy.pricingFactors.rScoreBeta}</b></span>
-                        </div>
-                      </div>
-
-                      {/* Triggers */}
-                      <div style={{ marginBottom: '14px' }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>Parametric Triggers</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                          {policy.triggers.map((t, i) => <span key={i} style={{ background: policy.accentColor, color: policy.color, border: `1px solid ${policy.color}30`, borderRadius: '6px', padding: '2px 8px', fontSize: '0.72rem', fontWeight: 600 }}>{t}</span>)}
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button className="btn btn-outline" style={{ flex: 1, fontSize: '0.85rem' }}>Edit Pricing Factors</button>
-                        <button className="btn" style={{ flex: 1, background: policy.color, color: 'white', border: 'none', fontSize: '0.85rem' }}>Toggle Active</button>
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
             </>
           )}
@@ -2585,32 +2610,31 @@ export default function App() {
                 <h1 className="animate-slide-up">Payout Monitoring</h1>
                 <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Track automated transparency and financial outflows.</p>
               </header>
-              <div className="card glass-panel">
+              <div className="table-container card glass-panel">
                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'rgba(0,0,0,0.03)' }}>
-                      <th style={{ padding: '12px' }}>Date</th>
-                      <th style={{ padding: '12px' }}>Cause</th>
+                      <th style={{ padding: '12px' }}>Worker ID</th>
+                      <th style={{ padding: '12px' }}>Disruption Cause</th>
                       <th style={{ padding: '12px' }}>Amount</th>
                       <th style={{ padding: '12px' }}>Bank Ref</th>
                       <th style={{ padding: '12px' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Today, 2:40 PM</td>
-                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Downtown Flood</td>
-                      <td style={{ padding: '12px', fontWeight: 600 }}>₹1,500</td>
-                      <td style={{ padding: '12px', fontFamily: 'monospace' }}>UPI-0092A</td>
-                      <td style={{ padding: '12px' }}><span className="badge badge-green">Success</span></td>
-                    </tr>
-                    <tr style={{ borderTop: '1px solid var(--card-border)' }}>
-                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Today, 1:15 PM</td>
-                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Downtown Flood</td>
-                      <td style={{ padding: '12px', fontWeight: 600 }}>₹1,500</td>
-                      <td style={{ padding: '12px', fontFamily: 'monospace' }}>NEFT-90X</td>
-                      <td style={{ padding: '12px' }}><span className="badge badge-red">Failed</span></td>
-                    </tr>
+                    {adminData.claims && adminData.claims.filter(c => c.status === 'APPROVED').length > 0 ? (
+                       adminData.claims.filter(c => c.status === 'APPROVED').map((claim, idx) => (
+                         <tr key={idx} style={{ borderTop: idx > 0 ? '1px solid var(--card-border)' : 'none' }}>
+                           <td style={{ padding: '12px', fontSize: '0.9rem' }}>WRK-{claim.worker_id}</td>
+                           <td style={{ padding: '12px', fontSize: '0.9rem' }}>{claim.trigger_type}</td>
+                           <td style={{ padding: '12px', fontWeight: 600 }}>₹{claim.payout_amount}</td>
+                           <td style={{ padding: '12px', fontFamily: 'monospace' }}>UPI-AEGIS-{claim.id}</td>
+                           <td style={{ padding: '12px' }}><span className="badge badge-green">Success</span></td>
+                         </tr>
+                       ))
+                    ) : (
+                       <tr><td colSpan="5" style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>No live payouts recorded in local ledger.</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -2651,19 +2675,23 @@ export default function App() {
               </header>
               <div className="card glass-panel" style={{ textAlign: 'center', padding: '40px' }}>
                 <TrendingDown size={48} color="var(--primary)" style={{ marginBottom: '16px' }} />
-                <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Current Weekly Loss Ratio</div>
-                <h1 style={{ fontSize: '3rem', color: 'var(--text-main)', marginBottom: '16px' }}>64.2%</h1>
+                <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Live Capital Loss Ratio</div>
+                <h1 style={{ fontSize: '3rem', color: 'var(--text-main)', marginBottom: '16px' }}>
+                  {adminData.policies && adminData.policies.reduce((acc, pol) => acc + pol.premium_paid, 0) > 0 ?
+                    ((adminData.claims.filter(c => c.status === 'APPROVED').reduce((acc, claim) => acc + claim.payout_amount, 0) / adminData.policies.reduce((acc, pol) => acc + pol.premium_paid, 0)) * 100).toFixed(1)
+                  : 0}%
+                </h1>
                 <p style={{ maxWidth: '600px', margin: '0 auto', color: 'var(--text-muted)' }}>
-                  This means for every ₹100 collected in premiums, ₹64.20 is being paid out in parametric claims. The model target is 65%, indicating the current pricing structure is highly sustainable.
+                  This reflects the literal payout ratios computed dynamically from the `aegis.db` ledger. For every ₹100 collected in premiums, this ratio shows how much capital is flowing out as parametric payouts.
                 </p>
                 <div style={{ marginTop: '32px', display: 'flex', justifyContent: 'center', gap: '32px' }}>
                   <div>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Premiums (Week)</div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹4,98,050</div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Premiums (Database)</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹{adminData.policies ? adminData.policies.reduce((acc, pol) => acc + pol.premium_paid, 0).toLocaleString() : 0}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Payouts (Week)</div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹3,19,748</div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Payouts (Database)</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹{adminData.claims ? adminData.claims.filter(c => c.status === 'APPROVED').reduce((acc, claim) => acc + claim.payout_amount, 0).toLocaleString() : 0}</div>
                   </div>
                 </div>
               </div>
@@ -2677,10 +2705,10 @@ export default function App() {
                 <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Statistics and demographics about insured delivery workers.</p>
               </header>
               <div className="grid-4">
-                <div className="card"><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Total Insured</div><h2 style={{ marginTop: '8px' }}>24,910</h2></div>
-                <div className="card" style={{ borderLeft: '4px solid var(--accent-orange)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>High-Risk Workers</div><h2 style={{ marginTop: '8px' }}>1,420</h2></div>
-                <div className="card" style={{ borderLeft: '4px solid var(--accent-red)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Frequent Claimers</div><h2 style={{ marginTop: '8px' }}>85</h2></div>
-                <div className="card" style={{ borderLeft: '4px solid var(--accent-green)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Zero Claim Workers</div><h2 style={{ marginTop: '8px' }}>19,500</h2></div>
+                <div className="card"><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Total Insured</div><h2 style={{ marginTop: '8px' }}>{adminData.workers ? adminData.workers.length.toLocaleString() : 0}</h2></div>
+                <div className="card" style={{ borderLeft: '4px solid var(--accent-orange)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>High-Risk Workers</div><h2 style={{ marginTop: '8px' }}>{adminData.workers ? adminData.workers.filter(w => w.risk_score < 50).length.toLocaleString() : 0}</h2></div>
+                <div className="card" style={{ borderLeft: '4px solid var(--accent-red)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Fraud Flags</div><h2 style={{ marginTop: '8px' }}>{adminData.claims ? adminData.claims.filter(c => c.fraud_score > 50).length.toLocaleString() : 0}</h2></div>
+                <div className="card" style={{ borderLeft: '4px solid var(--accent-green)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Zero Claim Workers</div><h2 style={{ marginTop: '8px' }}>{adminData.workers ? adminData.workers.filter(w => !adminData.claims?.find(c => c.worker_id === w.id)).length.toLocaleString() : 0}</h2></div>
               </div>
             </>
           )}
@@ -2692,13 +2720,13 @@ export default function App() {
                 <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Active API endpoints generating parametric truths.</p>
               </header>
               <div className="grid-3">
-                {PREDEFINED_TRIGGERS.map((t, idx) => (
+                {['Heavy Rain (>50mm/hr)', 'Extreme Heat (>45°C)', 'Government Lockdown', 'Air Quality (AQI > 400)', 'Road Network Failure', 'Cellular Outage'].map((condition, idx) => (
                   <div key={idx} className="card glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <div style={{ padding: '12px', background: 'rgba(0,115,152,0.1)', borderRadius: '12px', color: 'var(--primary)' }}>
-                      {t.icon}
+                      <Activity size={24} />
                     </div>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>{t.condition}</div>
+                      <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>{condition}</div>
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                         <div style={{ width: 8, height: 8, background: 'var(--accent-green)', borderRadius: '50%' }}></div> Polling Every 60s
                       </div>
@@ -2718,31 +2746,10 @@ export default function App() {
               <div className="grid-2">
                 <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h3 style={{ marginBottom: '4px' }}>Weekly Claims Report</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>All processed constraints & amounts.</p>
+                    <h3 style={{ marginBottom: '4px' }}>Full Immutable Ledger Export (JSON)</h3>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Downloads the complete SQLite dataset representing all Workers, Claims, and Policies directly to your machine.</p>
                   </div>
-                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> CSV</button>
-                </div>
-                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ marginBottom: '4px' }}>Fraud Investigation Log</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Suspicious telemetry trails flagged.</p>
-                  </div>
-                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> Excel</button>
-                </div>
-                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ marginBottom: '4px' }}>Disruption Impact Analysis</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Geographical breakdown of loss.</p>
-                  </div>
-                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> PDF</button>
-                </div>
-                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ marginBottom: '4px' }}>Monthly Payout Ledger</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Cross-referenced banking transcripts.</p>
-                  </div>
-                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> Excel</button>
+                  <button onClick={downloadSQLiteDump} className="btn btn-primary" style={{ display: 'flex', gap: '8px', cursor: 'pointer' }}><Download size={16} /> JSON DUMP</button>
                 </div>
               </div>
             </>
