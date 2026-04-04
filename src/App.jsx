@@ -2688,7 +2688,7 @@ export default function App() {
       {currentView === 'login' && renderLogin()}
       {currentView === 'onboarding' && renderOnboarding()}
       {currentView === 'rider-dash' && renderRiderDashboard()}
-      {currentView === 'admin-dash' && <ControlCenter setCurrentView={setCurrentView} adminLogs={adminLogs} engineStates={engineStates} injectScenario={injectScenario} resetEngines={resetEngines} />}
+      {currentView === 'admin-dash' && <ControlCenter setCurrentView={setCurrentView} adminLogs={adminLogs} engineStates={engineStates} injectScenario={injectScenario} resetEngines={resetEngines} parametricTriggerResult={parametricTriggerResult} setParametricTriggerResult={setParametricTriggerResult} parametricCity={parametricCity} setParametricCity={setParametricCity} parametricTriggerLoading={parametricTriggerLoading} handleParametricRainTrigger={handleParametricRainTrigger} handleParametricHeatTrigger={handleParametricHeatTrigger} handleParametricStrikeTrigger={handleParametricStrikeTrigger} />}
       {renderAddMoneyModal()}
       {renderConfirmPlanModal()}
       {renderErrorModal()}

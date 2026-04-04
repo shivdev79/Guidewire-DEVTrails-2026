@@ -11,7 +11,7 @@ import {
 
 const API_BASE_URL = 'http://localhost:8000';
 
-export default function ControlCenter({ setCurrentView, adminLogs = [], engineStates = {} }) {
+export default function ControlCenter({ setCurrentView, adminLogs = [], engineStates = {}, parametricTriggerResult = null, setParametricTriggerResult = () => {}, parametricCity = 'Mumbai', setParametricCity = () => {}, parametricTriggerLoading = false, handleParametricRainTrigger = () => {}, handleParametricHeatTrigger = () => {}, handleParametricStrikeTrigger = () => {} }) {
   const [activeTab, setActiveTab] = useState('overview');
   // Local state for live terminals to give the "OS" feel
   const [liveStream, setLiveStream] = useState([]);
@@ -596,37 +596,175 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
 
           {activeTab === 'trigger' && (
             <div className="animate-slide-up">
-              <SectionHeader title="Parametric Trigger Engine" desc="Multi-lock validation system mapping input truth to automated action." />
-              <div className="grid-2" style={{ marginBottom: '32px' }}>
-                <div className="card glass-panel" style={{ borderTop: '4px solid var(--primary)', background: 'linear-gradient(180deg, white, var(--app-bg))' }}>
-                  <h3 style={{ color: 'var(--text-main)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}><Lock size={20} color="var(--primary)"/> Lock 1 (Disruption Physicals)</h3>
-                  <ul style={{ color: 'var(--text-muted)', lineHeight: '2.5', listStylePosition: 'outside', paddingLeft: '16px' }}>
-                    <li><strong>Weather & Sensors:</strong> Rain / Heat / AQI real-time thresholds via IMD APIs</li>
-                    <li><strong>NLP Engine:</strong> DistilBERT parsing live Twitter / Civic Strike inputs</li>
-                    <li><strong>Geofencing bounds:</strong> Active Red Polygon bounding verification</li>
-                  </ul>
+              <SectionHeader title="🌍 Parametric Event Triggers" desc="Location-based automatic claim generation. One trigger = Multiple workers auto-compensated." />
+              
+              {/* City Selection + Trigger Buttons */}
+              <div className="card glass-panel animate-slide-up delay-200" style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '32px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px', color: 'var(--text-main)' }}>Select City for Event</label>
+                  <select 
+                    value={parametricCity} 
+                    onChange={(e) => setParametricCity(e.target.value)}
+                    style={{ 
+                      width: '100%', 
+                      padding: '12px 16px', 
+                      borderRadius: '12px', 
+                      border: '1px solid rgba(0,115,152,0.2)', 
+                      fontSize: '1rem',
+                      fontWeight: 500,
+                      background: '#ffffff',
+                      color: '#0f172a'
+                    }}
+                  >
+                    <option value="Mumbai">🌆 Mumbai (Western India)</option>
+                    <option value="Bangalore">🏙️ Bangalore (Southern India)</option>
+                    <option value="Delhi">🌃 Delhi (Northern India)</option>
+                    <option value="Chennai">🌊 Chennai (Coastal)</option>
+                    <option value="Pune">⛰️ Pune (Hill Station)</option>
+                    <option value="Hyderabad">🏛️ Hyderabad (Central India)</option>
+                  </select>
                 </div>
-                <div className="card glass-panel" style={{ borderTop: '4px solid #8b5cf6', background: 'linear-gradient(180deg, white, var(--app-bg))' }}>
-                  <h3 style={{ color: 'var(--text-main)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}><Lock size={20} color="#8b5cf6"/> Lock 2 (Income Telemetry)</h3>
-                  <ul style={{ color: 'var(--text-muted)', lineHeight: '2.5', listStylePosition: 'outside', paddingLeft: '16px' }}>
-                    <li><strong>DBSCAN Density:</strong> Velocity clustering maps mapping true grid lockups</li>
-                    <li><strong>Platform Link:</strong> Direct API verifying massive order drop percentages</li>
-                    <li><strong>Rider State:</strong> Proof-of-Work active status validated locally</li>
-                  </ul>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-main)' }}>Demo Trigger Events (Click to Auto-Compensate All Workers in {parametricCity})</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+                    {/* Heavy Rain Trigger */}
+                    <button 
+                      onClick={handleParametricRainTrigger}
+                      disabled={parametricTriggerLoading}
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        gap: '12px',
+                        padding: '20px',
+                        background: 'linear-gradient(135deg, rgba(59,130,246,0.1), rgba(59,130,246,0.05))',
+                        border: '1px solid rgba(59,130,246,0.3)',
+                        borderRadius: '16px',
+                        cursor: parametricTriggerLoading ? 'wait' : 'pointer',
+                        transition: 'all 0.3s ease',
+                        opacity: parametricTriggerLoading ? 0.6 : 1
+                      }}
+                    >
+                      <div style={{ fontSize: '2rem' }}>🌧️</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Heavy Rain Event</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Rainfall >50mm/hr detected</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 500, color: '#3b82f6', marginTop: '8px' }}>
+                        {parametricTriggerLoading ? 'Triggering...' : 'Click to trigger for ' + parametricCity}
+                      </div>
+                    </button>
+
+                    {/* Extreme Heat Trigger */}
+                    <button 
+                      onClick={handleParametricHeatTrigger}
+                      disabled={parametricTriggerLoading}
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        gap: '12px',
+                        padding: '20px',
+                        background: 'linear-gradient(135deg, rgba(249,115,22,0.1), rgba(249,115,22,0.05))',
+                        border: '1px solid rgba(249,115,22,0.3)',
+                        borderRadius: '16px',
+                        cursor: parametricTriggerLoading ? 'wait' : 'pointer',
+                        transition: 'all 0.3s ease',
+                        opacity: parametricTriggerLoading ? 0.6 : 1
+                      }}
+                    >
+                      <div style={{ fontSize: '2rem' }}>🔥</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Extreme Heat Event</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Temperature >44°C detected</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 500, color: '#f97316', marginTop: '8px' }}>
+                        {parametricTriggerLoading ? 'Triggering...' : 'Click to trigger for ' + parametricCity}
+                      </div>
+                    </button>
+
+                    {/* Civic Strike Trigger */}
+                    <button 
+                      onClick={handleParametricStrikeTrigger}
+                      disabled={parametricTriggerLoading}
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        gap: '12px',
+                        padding: '20px',
+                        background: 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(239,68,68,0.05))',
+                        border: '1px solid rgba(239,68,68,0.3)',
+                        borderRadius: '16px',
+                        cursor: parametricTriggerLoading ? 'wait' : 'pointer',
+                        transition: 'all 0.3s ease',
+                        opacity: parametricTriggerLoading ? 0.6 : 1
+                      }}
+                    >
+                      <div style={{ fontSize: '2rem' }}>🚨</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Civic Strike Event</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Complete income disruption</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 500, color: '#ef4444', marginTop: '8px' }}>
+                        {parametricTriggerLoading ? 'Triggering...' : 'Click to trigger for ' + parametricCity}
+                      </div>
+                    </button>
+                  </div>
                 </div>
               </div>
-              
-              <div className="card glass-panel" style={{ padding: '40px', textAlign: 'center' }}>
-                <h3 style={{ color: 'var(--text-main)', marginBottom: '32px', fontSize: '1.4rem' }}>Automated Trigger Pipeline Funnel</h3>
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
-                  <div className="badge badge-blue" style={{ fontSize: '1rem', padding: '16px 24px', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.2)' }}>Environmental Event Output</div>
-                  <span style={{ fontSize: '1.5rem', color: 'var(--text-muted)', fontWeight: 800 }}>&rarr;</span>
-                  <div className="badge badge-orange" style={{ fontSize: '1rem', padding: '16px 24px', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.2)' }}>Valid Trigger (Lock 1)</div>
-                  <span style={{ fontSize: '1.5rem', color: 'var(--text-muted)', fontWeight: 800 }}>&rarr;</span>
-                  <div className="badge badge-green" style={{ fontSize: '1rem', padding: '16px 24px', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)' }}>Loss Verified (Lock 2)</div>
-                  <span style={{ fontSize: '1.5rem', color: 'var(--primary)', fontWeight: 800 }}>&rarr;</span>
-                  <div className="badge badge-blue" style={{ fontSize: '1.2rem', padding: '16px 32px', background: 'var(--primary)', color: 'white', boxShadow: '0 4px 16px var(--glow-primary)' }}>Claim Constructed</div>
+
+              {/* Results Display */}
+              {parametricTriggerResult && (
+                <div className="card glass-panel animate-slide-up delay-300" style={{ padding: '32px', background: 'linear-gradient(135deg, rgba(16,185,129,0.05), rgba(16,185,129,0.02))', borderLeft: '4px solid var(--accent-green)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+                    <div style={{ fontSize: '2rem' }}>✅</div>
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700 }}>Parametric Trigger Activated</h2>
+                      <p style={{ margin: '4px 0 0 0', color: 'var(--text-muted)', fontSize: '0.95rem' }}>{parametricTriggerResult.message}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid-3" style={{ gap: '20px', marginBottom: '24px' }}>
+                    <div style={{ padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.1)' }}>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>Location Triggered</div>
+                      <div style={{ fontSize: '1.6rem', fontWeight: 700, margin: '8px 0', color: '#0f172a' }}>{parametricTriggerResult.location}</div>
+                    </div>
+                    <div style={{ padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.1)' }}>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>Workers Affected</div>
+                      <div style={{ fontSize: '1.6rem', fontWeight: 700, margin: '8px 0', color: '#0f172a' }}>{parametricTriggerResult.affected_workers_count}</div>
+                    </div>
+                    <div style={{ padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.1)' }}>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>Total Payouts</div>
+                      <div style={{ fontSize: '1.6rem', fontWeight: 700, margin: '8px 0', color: 'var(--accent-green)' }}>₹{parametricTriggerResult.total_payout?.toLocaleString?.() || '0'}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'white', borderRadius: '12px', padding: '16px', maxHeight: '300px', overflowY: 'auto' }}>
+                    <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', fontWeight: 600 }}>Affected Workers - Instant Claims Generated</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {parametricTriggerResult.affected_workers?.slice(0, 10).map((worker, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: 'rgba(16,185,129,0.05)', borderRadius: '8px', borderLeft: '3px solid var(--accent-green)' }}>
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#0f172a' }}>Worker #{worker.worker_id}: {worker.worker_name}</div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{worker.policy_tier} Tier Policy</div>
+                          </div>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-green)' }}>₹{worker.payout}</div>
+                        </div>
+                      ))}
+                      {parametricTriggerResult.affected_workers?.length > 10 && (
+                        <div style={{ padding: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                          ... and {parametricTriggerResult.affected_workers.length - 10} more workers
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
+              )}
+
+              {/* Info Banner */}
+              <div className="card glass-panel animate-slide-up delay-400" style={{ padding: '24px', background: 'linear-gradient(135deg, rgba(59,130,246,0.05), rgba(0,115,152,0.05))', borderLeft: '4px solid var(--primary)' }}>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '1.05rem', fontWeight: 600, color: '#0f172a' }}>🎯 How Parametric Triggers Work</h3>
+                <ul style={{ margin: 0, paddingLeft: '20px', color: 'var(--text-muted)', lineHeight: '1.8' }}>
+                  <li><strong>Single Click Demo:</strong> Click any trigger button to simulate a real-world event</li>
+                  <li><strong>Automatic Worker Discovery:</strong> System finds ALL workers in selected city with active policies</li>
+                  <li><strong>Instant Bulk Compensation:</strong> All matched workers receive APPROVED claims immediately</li>
+                  <li><strong>Location-Based Logic:</strong> Each trigger is tested against all workers in that geographic zone</li>
+                  <li><strong>Zero Manual Intervention:</strong> Workers see claims auto-appear in their dashboard (no action needed)</li>
+                  <li><strong>Payout Calculation:</strong> Premium × Event_Multiplier × Variance (capped at ₹500)</li>
+                </ul>
               </div>
             </div>
           )}
