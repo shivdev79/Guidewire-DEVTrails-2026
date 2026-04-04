@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, CheckCircle2, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase, Loader2, X, PlusCircle, Smartphone, Building2, ShoppingBag } from 'lucide-react';
+import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, CheckCircle2, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase, Loader2, X, PlusCircle, Smartphone, Building2, ShoppingBag, Lock } from 'lucide-react';
 import RegistrationFlow from './RegistrationFlow';
 import ControlCenter from './ControlCenter';
 
@@ -247,32 +247,41 @@ const ZONE_RISK_PROFILES = {
 // Dynamic Pricing Engine (mirrors backend: wallet can pay premium down to floor)
 const computeDynamicPremium = (policy, zoneId, rScore, walletBalance, weeklyRainMm = 10) => {
   const profile = ZONE_RISK_PROFILES[zoneId] || ZONE_RISK_PROFILES.z1;
-  const { expectedLossBase, lambda, gamma, rScoreBeta, pFloorPct } = policy.pricingFactors;
-  const baseExpectedLoss = policy.coverage * expectedLossBase;
+  
   const weatherMult = weeklyRainMm > 20 ? 1.35 : weeklyRainMm > 10 ? 1.1 : 0.92;
   const zoneMult = profile.riskMultiplier;
-  const expectedLoss = baseExpectedLoss * zoneMult * weatherMult;
-  const rDiscount = rScore * rScoreBeta;
-  const premiumBeforeWallet = (expectedLoss * (1 + lambda)) + gamma - rDiscount;
-  const pFloor = policy.coverage * pFloorPct;
+  
+  const basePremium = policy.basePrice;
+  // Dynamic adjustments (zone & weather) applied gently to the base price
+  const expectedPremium = basePremium * (1 + ((zoneMult * weatherMult) - 1) * 0.4); 
+  
+  // Max 15% discount for perfect R-Score of 100
+  const rScoreDiscountPct = Math.max(0, (rScore - 50) / 50) * 0.15;
+  const rDiscount = expectedPremium * rScoreDiscountPct;
+  
+  let premiumBeforeWallet = expectedPremium - rDiscount;
+  
+  // Wallet can at most pay for 40% of the premium
+  const pFloor = basePremium * 0.6; 
   const wCreditCap = Math.max(0, premiumBeforeWallet - pFloor);
   const wCredit = Math.min(Number(walletBalance) || 0, wCreditCap);
-  const rawPremium = premiumBeforeWallet - wCredit;
-  let finalPremium = Math.max(rawPremium, pFloor);
-  const basePremium = (baseExpectedLoss * (1 + lambda)) + gamma; // no zone or behavioural adjustments
+  
+  let finalPremium = premiumBeforeWallet - wCredit;
+  finalPremium = Math.max(finalPremium, pFloor);
+  
   const savings = Math.max(0, basePremium - finalPremium);
-  // Extended coverage hours if weather safe this week
   const bonusHours = weatherMult < 1 ? 2 : 0;
+  
   return {
-    finalPremium: Math.round(finalPremium * 100) / 100,
+    finalPremium: Math.round(finalPremium * 10) / 10,
     breakdown: {
-      expectedLoss: Math.round(expectedLoss * 100) / 100,
+      expectedLoss: Math.round(expectedPremium * 10) / 10,
       zoneMultiplier: zoneMult,
       weatherMultiplier: weatherMult,
-      rScoreDiscount: Math.round(rDiscount * 100) / 100,
-      walletCredit: Math.round(wCredit * 100) / 100,
+      rScoreDiscount: Math.round(rDiscount * 10) / 10,
+      walletCredit: Math.round(wCredit * 10) / 10,
     },
-    savings: Math.round(savings * 100) / 100,
+    savings: Math.round(savings * 10) / 10,
     bonusCoverageHours: policy.coverageHours + bonusHours,
     zoneInsight: profile.insight,
   };
@@ -316,12 +325,47 @@ export default function App() {
   const [manualClaim, setManualClaim] = useState({ reason: 'Rain', description: '', amount: '' });
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [activatedPlan, setActivatedPlan] = useState(null);
+  const [pendingPlanToActivate, setPendingPlanToActivate] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
   const [showPricingBreakdown, setShowPricingBreakdown] = useState(null); // policy.id or null
   const [showAddMoneyModal, setShowAddMoneyModal] = useState(false);
   const [addMoneyAmount, setAddMoneyAmount] = useState('');
   const [addMoneyPaymentMethod, setAddMoneyPaymentMethod] = useState('UPI');
   const [addMoneyStatus, setAddMoneyStatus] = useState('idle'); // idle, loading, success
   const [walletTransactions, setWalletTransactions] = useState([]);
+  const [showPlanPromptToast, setShowPlanPromptToast] = useState(false);
+  const [hasPromptedPlanToast, setHasPromptedPlanToast] = useState(false);
+  
+  const [chatMessages, setChatMessages] = useState([
+    { role: 'assistant', text: "Hi! I'm the Aegis Virtual Assistant." },
+    { role: 'assistant', text: "How can I help you today? You can ask me about tracking payouts, policy terms, or how parametric triggers work." }
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+
+  useEffect(() => {
+    if (currentView === 'rider-dash' && !hasActivePolicy && !hasPromptedPlanToast) {
+      setHasPromptedPlanToast(true);
+      const t1 = setTimeout(() => setShowPlanPromptToast(true), 1500);
+      const t2 = setTimeout(() => setShowPlanPromptToast(false), 6500);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    }
+  }, [currentView, hasActivePolicy, hasPromptedPlanToast]);
+
+  const [showLiveFeedDropdown, setShowLiveFeedDropdown] = useState(false);
+
+  useEffect(() => {
+    if (currentView === 'rider-dash') {
+      const timer = setTimeout(() => {
+        setShowLiveFeedDropdown(true);
+        const hideTimer = setTimeout(() => {
+          setShowLiveFeedDropdown(false);
+        }, 5000);
+        return () => clearTimeout(hideTimer);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [currentView]);
 
   const handleManualClaimSubmit = (e) => {
     e.preventDefault();
@@ -375,6 +419,15 @@ export default function App() {
             setHasActivePolicy(true);
             setCoverageAmount(data.active_policy.coverage_amount);
             setCalculatedPremium(data.active_policy.premium_paid);
+            
+            const savedId = localStorage.getItem('aegis_selected_plan_id');
+            const matchingPlan = POLICY_CATALOG.find(p => p.id === savedId) || POLICY_CATALOG.find(p => p.tier === data.active_policy.tier);
+            if (matchingPlan) {
+              setActivatedPlan({ id: matchingPlan.id, name: matchingPlan.name, premium: data.active_policy.premium_paid, tier: matchingPlan.tier });
+            }
+          } else {
+            setHasActivePolicy(false);
+            setActivatedPlan(null);
           }
           setRScore(data.worker.r_score);
           setWalletBalance(Number(data.worker?.wallet_balance ?? 0));
@@ -407,6 +460,34 @@ export default function App() {
     }
   }, [workerId, currentView]);
 
+  const handleChatSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (!chatInput.trim() || isChatLoading) return;
+    
+    const userMsg = chatInput.trim();
+    setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setChatInput('');
+    setIsChatLoading(true);
+    
+    try {
+      const res = await axios.post(`${API_BASE_URL}/ai-chat`, { 
+        message: userMsg,
+        context: {
+          rider_name: riderInfo.name,
+          has_policy: hasActivePolicy,
+          plan_name: activatedPlan?.name,
+          wallet_balance: walletBalance
+        }
+      });
+      setChatMessages(prev => [...prev, { role: 'assistant', text: res.data.response }]);
+    } catch (err) {
+      console.error("AI Chat error", err);
+      setChatMessages(prev => [...prev, { role: 'assistant', text: "I apologize, but I'm having difficulty connecting to our AI core. Please check your internet or try again." }]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
   const handleOnboardingSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -421,19 +502,8 @@ export default function App() {
         avg_weekly_earnings: riderInfo.avgEarnings
       });
       setWorkerId(res.data.id);
-      
-      // Also pre-calculate premium to show
-      const premRes = await axios.post(`${API_BASE_URL}/calculate-premium`, {
-        worker_id: res.data.id,
-        tier
-      });
-      setCalculatedPremium(premRes.data.premium_amount);
-      setCoverageAmount(premRes.data.coverage_amount);
-      await axios.post(`${API_BASE_URL}/create-policy`, {
-        worker_id: res.data.id,
-        tier,
-        accepted_terms: true
-      });
+      // Pre-calculation logic and automatic policy creation code removed
+      // The user must manually select a plan from Explore Plans
       
       setCurrentView('rider-dash');
     } catch (e) {
@@ -445,11 +515,11 @@ export default function App() {
   const defaultPolicyTier = () =>
     riderInfo.avgEarnings > 5000 ? 'Elite' : riderInfo.avgEarnings > 3000 ? 'Pro' : 'Base';
 
-  const initiatePolicy = async (tierOverride) => {
+  const initiatePolicy = async (tierOverride, planDetails = null) => {
     const wid = parseWorkerId(workerId);
     if (!wid) {
-      alert('Sign in or complete registration so we have a valid worker id.');
-      return;
+      setErrorMessage('Sign in or complete registration so we have a valid worker id.');
+      return false;
     }
     const tier = tierOverride || defaultPolicyTier();
     try {
@@ -459,6 +529,9 @@ export default function App() {
         accepted_terms: true,
       });
       setHasActivePolicy(true);
+      if (planDetails) {
+        setActivatedPlan({ id: planDetails.id, name: planDetails.name, premium: planDetails.premium, tier });
+      }
       try {
         const dash = await axios.get(`${API_BASE_URL}/worker/${wid}/dashboard`);
         const d = dash.data;
@@ -467,10 +540,12 @@ export default function App() {
       } catch {
         /* refresh best-effort */
       }
+      return true;
     } catch (e) {
       console.error('Failed to create policy', e);
       const msg = e.response?.data?.detail;
-      alert(typeof msg === 'string' ? msg : 'Could not activate plan. You may already have an active policy, or the server returned an error.');
+      setErrorMessage(typeof msg === 'string' ? msg : 'Could not activate plan. You may already have an active policy, or the server returned an error.');
+      return false;
     }
   };
 
@@ -1089,9 +1164,61 @@ export default function App() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-            <button className="btn" style={{ background: 'rgba(255,255,255,0.1)', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem' }}>
-              <Bell size={14} /> Notifications
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button 
+                className="btn" 
+                style={{ background: 'rgba(255,255,255,0.1)', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', position: 'relative' }}
+                onClick={() => setShowLiveFeedDropdown(!showLiveFeedDropdown)}
+              >
+                <Bell size={14} /> Notifications
+                {showLiveFeedDropdown && <div style={{ position: 'absolute', top: 0, right: 0, width: 8, height: 8, background: '#ef4444', borderRadius: '50%' }} className="animate-pulse" />}
+              </button>
+              
+              <AnimatePresence>
+                {showLiveFeedDropdown && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }} 
+                    animate={{ opacity: 1, y: 0, scale: 1 }} 
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }} 
+                    transition={{ duration: 0.2 }}
+                    style={{ position: 'absolute', top: 'calc(100% + 12px)', right: 0, width: '320px', background: 'white', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', overflow: 'hidden', zIndex: 100 }}
+                  >
+                    <div style={{ background: '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', fontWeight: 700, color: '#0f172a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      Live System Feed
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', fontWeight: 600, color: '#10b981' }}>
+                        <div className="animate-pulse" style={{ width: 8, height: 8, background: '#10b981', borderRadius: '50%' }} /> Active
+                      </div>
+                    </div>
+                    <div style={{ padding: '8px' }}>
+                      <div style={{ padding: '12px', fontSize: '0.85rem', color: '#334155', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                          <div style={{ marginTop: '2px' }}><Activity size={14} color="#38bdf8" /></div>
+                          <div><strong>Live feed active</strong><br/><span style={{ fontSize: '0.75rem', color: '#64748b' }}>Node: {workerId || 'Pending'} | Wallet: ₹{walletBalance}</span></div>
+                        </div>
+                        <div style={{ width: '100%', height: '1px', background: '#f1f5f9' }} />
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                          <div style={{ marginTop: '2px' }}><ShieldCheck size={14} color="#10b981" /></div>
+                          <div><strong>This is your active plan</strong><br/>
+                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                              {hasActivePolicy && activatedPlan ? `${activatedPlan.name} (Coverage: ₹${coverageAmount})` : 'No policy activated yet.'}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ width: '100%', height: '1px', background: '#f1f5f9' }} />
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                          <div style={{ marginTop: '2px' }}><Radio size={14} color="#f59e0b" /></div>
+                          <div><strong>Guidewire Sync</strong><br/>
+                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                              Zone: {ZONE_RISK_PROFILES[riderInfo.zone]?.name || 'Unknown'} | R-Score: {rScore}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{riderInfo.name || 'Partner'}</span>
               <div style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1166,8 +1293,8 @@ export default function App() {
                         <span className="badge badge-green">Active Policy</span>
                         <CheckCircle size={20} color="var(--accent-green)" />
                       </div>
-                      <h2 style={{ fontSize: '1.8rem', marginBottom: '4px' }}>₹{coverageAmount}</h2>
-                      <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Max Weekly Coverage</p>
+                      <h2 style={{ fontSize: '1.8rem', marginBottom: '4px' }}>₹{coverageAmount.toLocaleString()}</h2>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{activatedPlan?.name} Protection active</p>
                     </div>
                   ) : (
                     <div className="card glass-panel">
@@ -1533,9 +1660,9 @@ export default function App() {
                           <button
                             onClick={e => {
                               e.stopPropagation();
-                              initiatePolicy(policy.tier);
-                              setActivatedPlan({ id: policy.id, name: policy.name, premium: pricing.finalPremium });
+                              if (isCurrentActive) return;
                               setSelectedPlan(policy.id);
+                              setPendingPlanToActivate({ policy, pricing });
                             }}
                             className={isCurrentActive ? '' : 'btn'}
                             style={{
@@ -1556,7 +1683,9 @@ export default function App() {
                               transition: 'all 0.2s ease'
                             }}
                           >
-                            {isCurrentActive ? <><CheckCircle size={20} /> Currently Active Plan</> : isSelected ? `Activate ${policy.name}` : 'Select Plan'}
+                            {isCurrentActive ? <><CheckCircle size={20} /> Currently Active</> : 
+                             (hasActivePolicy ? <><Zap size={20} /> Upgrade to {policy.name}</> : 
+                             (isSelected ? `Activate ${policy.name}` : 'Select Plan'))}
                           </button>
                         </div>
                       </div>
@@ -1845,24 +1974,26 @@ export default function App() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '16px' }}>
                       <div>
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '4px' }}>Current Plan</p>
-                        <h2 style={{ fontSize: '1.4rem' }}>Standard Plan</h2>
+                        <h2 style={{ fontSize: '1.4rem' }}>{activatedPlan ? activatedPlan.name : 'Standard Plan'}</h2>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '4px' }}>Premium</p>
-                        <h2 style={{ fontSize: '1.4rem', color: 'var(--primary)' }}>₹40/wk</h2>
+                        <h2 style={{ fontSize: '1.4rem', color: 'var(--primary)' }}>₹{activatedPlan ? activatedPlan.premium : 40}/wk</h2>
                       </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px', background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '8px' }}>
                       <div>
                         <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Coverage Limit</div>
-                        <div style={{ fontWeight: 600 }}>₹1,500 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>/ claim</span></div>
+                        <div style={{ fontWeight: 600 }}>₹{hasActivePolicy ? coverageAmount.toLocaleString() : '0'} <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>/ week</span></div>
                       </div>
                       <div>
                         <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Status</div>
                         <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>Expires Sunday</div>
                       </div>
                     </div>
-                    <button className="btn btn-primary" style={{ width: '100%', marginBottom: '8px' }}>Upgrade to Premium (₹85/wk)</button>
+                    <button className="btn btn-primary" style={{ width: '100%', marginBottom: '8px' }} onClick={() => setRiderTab('explore-plans')}>
+                      {hasActivePolicy ? 'Upgrade Coverage' : 'Browse All Plans'}
+                    </button>
                     <button className="btn btn-outline" style={{ width: '100%' }}>Manage Current Plan</button>
                   </div>
 
@@ -1998,13 +2129,13 @@ export default function App() {
                       <Shield size={32} color="var(--primary)" />
                     </div>
                     <div>
-                      <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>General Policy Name</div>
-                      <h2 style={{ fontSize: '1.4rem', margetBottom: 0 }}>Aegis Shield Base Plan</h2>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Active Policy Tier</div>
+                      <h2 style={{ fontSize: '1.4rem', marginBottom: 0 }}>{activatedPlan ? activatedPlan.name : 'No Active Plan'}</h2>
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Policy Number</div>
-                    <h2 style={{ fontSize: '1.4rem', margetBottom: 0, fontFamily: 'monospace', color: 'var(--primary)' }}>POL-9X28-44A</h2>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Policy Status</div>
+                    <h2 style={{ fontSize: '1.4rem', marginBottom: 0, color: hasActivePolicy ? 'var(--accent-green)' : 'var(--accent-red)' }}>{hasActivePolicy ? 'ENFORCED' : 'INACTIVE'}</h2>
                   </div>
                 </div>
 
@@ -2061,13 +2192,13 @@ export default function App() {
                   {/* Income Protection Tracker */}
                   <div className="card glass-panel" style={{ borderLeft: '4px solid var(--accent-green)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <span className="badge badge-green">Income Protected</span>
+                      <span className="badge badge-green">Maximum Coverage</span>
                       <ShieldCheck size={20} color="var(--accent-green)" />
                     </div>
-                    <h2 style={{ fontSize: '2rem', marginBottom: '4px' }}>₹{(riderInfo.avgEarnings * 0.8).toFixed(0)}</h2>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Secured for this week</p>
+                    <h2 style={{ fontSize: '2rem', marginBottom: '4px' }}>₹{hasActivePolicy ? coverageAmount.toLocaleString() : '0'}</h2>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Secured payout limit per week</p>
                     <div style={{ marginTop: '16px', background: 'var(--card-border)', height: '6px', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div style={{ background: 'var(--accent-green)', width: '100%', height: '100%' }}></div>
+                      <div style={{ background: hasActivePolicy ? 'var(--accent-green)' : 'var(--card-border)', width: hasActivePolicy ? '100%' : '0%', height: '100%' }}></div>
                     </div>
                   </div>
 
@@ -2149,26 +2280,42 @@ export default function App() {
                 <div className="grid-2 animate-slide-up delay-200">
                   <div className="card glass-panel" style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
                     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '16px', borderBottom: '1px solid var(--card-border)', marginBottom: '16px' }}>
-                      <div style={{ background: 'rgba(0, 115, 152, 0.1)', padding: '12px 16px', borderRadius: '12px 12px 12px 0', alignSelf: 'flex-start', maxWidth: '80%' }}>
-                        <p style={{ fontSize: '0.95rem' }}>Hi {riderInfo.name || 'Partner'}! I'm the Aegis Virtual Assistant.</p>
-                      </div>
-                      <div style={{ background: 'rgba(0, 115, 152, 0.1)', padding: '12px 16px', borderRadius: '12px 12px 12px 0', alignSelf: 'flex-start', maxWidth: '80%' }}>
-                        <p style={{ fontSize: '0.95rem' }}>How can I help you today? You can ask me about tracking refunds, policy terms, or how parametric payouts trigger.</p>
-                      </div>
-
-                      <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', padding: '12px 16px', borderRadius: '12px 12px 0 12px', alignSelf: 'flex-end', maxWidth: '80%' }}>
-                        <p style={{ fontSize: '0.95rem' }}>How long does a manual claim refund take?</p>
-                      </div>
-
-                      <div style={{ background: 'rgba(0, 115, 152, 0.1)', padding: '12px 16px', borderRadius: '12px 12px 12px 0', alignSelf: 'flex-start', maxWidth: '80%' }}>
-                        <p style={{ fontSize: '0.95rem' }}>Manual claims are reviewed within <b>24-48 hours</b>. Once approved, refunds are credited directly to your primary payout bank account/UPI within 2 hours. You can track this in the <b>Wallet</b> tab.</p>
-                      </div>
+                      {chatMessages.map((msg, i) => (
+                        <div 
+                          key={i} 
+                          style={{ 
+                            background: msg.role === 'assistant' ? 'rgba(0, 115, 152, 0.1)' : 'var(--card-bg)', 
+                            border: msg.role === 'assistant' ? 'none' : '1px solid var(--card-border)',
+                            padding: '12px 16px', 
+                            borderRadius: msg.role === 'assistant' ? '12px 12px 12px 0' : '12px 12px 0 12px', 
+                            alignSelf: msg.role === 'assistant' ? 'flex-start' : 'flex-end', 
+                            maxWidth: '85%'
+                          }}
+                        >
+                          <p style={{ fontSize: '0.95rem' }}>{msg.text}</p>
+                        </div>
+                      ))}
+                      {isChatLoading && (
+                        <div style={{ background: 'rgba(0, 115, 152, 0.05)', padding: '12px 16px', borderRadius: '12px 12px 12px 0', alignSelf: 'flex-start' }}>
+                          <Loader2 className="animate-spin" size={18} color="var(--primary)" />
+                        </div>
+                      )}
                     </div>
 
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                      <input type="text" className="input-field" placeholder="Type your query..." style={{ flex: 1 }} />
-                      <button className="btn btn-primary" style={{ padding: '12px' }}><Send size={18} /></button>
-                    </div>
+                    <form onSubmit={handleChatSubmit} style={{ display: 'flex', gap: '12px' }}>
+                      <input 
+                        type="text" 
+                        className="input-field" 
+                        placeholder="Type your query..." 
+                        style={{ flex: 1 }} 
+                        value={chatInput}
+                        onChange={e => setChatInput(e.target.value)}
+                        disabled={isChatLoading}
+                      />
+                      <button type="submit" className="btn btn-primary" style={{ padding: '12px' }} disabled={isChatLoading || !chatInput.trim()}>
+                        <Send size={18} />
+                      </button>
+                    </form>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -2383,6 +2530,106 @@ export default function App() {
     </AnimatePresence>
   );
 
+  const renderConfirmPlanModal = () => (
+    <AnimatePresence>
+      {pendingPlanToActivate && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} style={{ background: 'white', borderRadius: '24px', width: '100%', maxWidth: '450px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+            <div style={{ padding: '32px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{ background: pendingPlanToActivate.policy.accentColor, padding: '14px', borderRadius: '16px' }}>
+                    <ShieldCheck size={32} color={pendingPlanToActivate.policy.color} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-main)', lineHeight: 1.2 }}>Confirm Upgrade</h2>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 600 }}>{pendingPlanToActivate.policy.name}</div>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setPendingPlanToActivate(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={24} /></button>
+              </div>
+              
+              <div style={{ background: 'rgba(0,0,0,0.02)', padding: '24px', borderRadius: '16px', border: '1px solid rgba(0,0,0,0.05)', marginBottom: '32px', fontSize: '1.05rem', color: '#334155', lineHeight: 1.6 }}>
+                 Are you sure you want to upgrade to <strong>{pendingPlanToActivate.policy.name}</strong> for <strong>₹{pendingPlanToActivate.pricing.finalPremium}/wk</strong>? 
+                 <br/><br/>
+                 This amount will be deducted directly from your Resilience Wallet.
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button type="button" onClick={() => setPendingPlanToActivate(null)} style={{ flex: 1, padding: '16px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '14px', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', transition: 'background 0.2s' }} onMouseOver={e => e.target.style.background = '#e2e8f0'} onMouseOut={e => e.target.style.background = '#f1f5f9'}>Cancel</button>
+                <button type="button" onClick={async () => {
+                  const pDetails = { id: pendingPlanToActivate.policy.id, name: pendingPlanToActivate.policy.name, premium: pendingPlanToActivate.pricing.finalPremium };
+                  const success = await initiatePolicy(pendingPlanToActivate.policy.tier, pDetails);
+                  if (success) {
+                    localStorage.setItem('aegis_selected_plan_id', pendingPlanToActivate.policy.id);
+                  }
+                  setPendingPlanToActivate(null);
+                }} style={{ flex: 1, padding: '16px', background: pendingPlanToActivate.policy.color, color: 'white', border: 'none', borderRadius: '14px', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', boxShadow: `0 8px 16px ${pendingPlanToActivate.policy.color}40`, transition: 'transform 0.2s' }} onMouseOver={e => e.target.style.transform = 'scale(1.02)'} onMouseOut={e => e.target.style.transform = 'scale(1)'}>Confirm</button>
+              </div>
+            </div>
+            <div style={{ padding: '14px', background: '#F8FAFC', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', borderTop: '1px solid var(--card-border)' }}>
+              <Lock size={12} /> Secure platform transaction
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  const renderErrorModal = () => (
+    <AnimatePresence>
+      {errorMessage && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} style={{ background: 'white', borderRadius: '24px', width: '100%', maxWidth: '400px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+            <div style={{ padding: '32px', textAlign: 'center' }}>
+              <div style={{ width: '64px', height: '64px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
+                <AlertOctagon size={32} color="#ef4444" />
+              </div>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '12px' }}>Action Failed</h2>
+              <div style={{ fontSize: '0.95rem', color: '#475569', lineHeight: 1.6, marginBottom: '28px' }}>
+                 {errorMessage}
+              </div>
+
+              <button type="button" onClick={() => setErrorMessage(null)} style={{ width: '100%', padding: '16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '14px', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)', transition: 'transform 0.2s' }} onMouseOver={e => e.target.style.transform = 'scale(1.02)'} onMouseOut={e => e.target.style.transform = 'scale(1)'}>Understood</button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  const renderPlanPromptToast = () => (
+    <AnimatePresence>
+      {showPlanPromptToast && (
+        <motion.div
+            initial={{ opacity: 0, y: -50, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -50, x: '-50%' }}
+            style={{
+              position: 'fixed',
+              top: '32px',
+              left: '50%',
+              background: 'rgba(15, 23, 42, 0.95)',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '100px',
+              padding: '12px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              zIndex: 9999,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
+            }}
+          >
+            <ShieldCheck size={20} color="#FFC72C" />
+            <span style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem', letterSpacing: '0.3px' }}>
+              Protect your income. Visit "Explore Plans" to select a policy!
+            </span>
+          </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   return (
     <>
       {currentView === 'login' && renderLogin()}
@@ -2390,6 +2637,9 @@ export default function App() {
       {currentView === 'rider-dash' && renderRiderDashboard()}
       {currentView === 'admin-dash' && <ControlCenter setCurrentView={setCurrentView} adminLogs={adminLogs} engineStates={engineStates} injectScenario={injectScenario} resetEngines={resetEngines} />}
       {renderAddMoneyModal()}
+      {renderConfirmPlanModal()}
+      {renderErrorModal()}
+      {renderPlanPromptToast()}
     </>
   );
 }

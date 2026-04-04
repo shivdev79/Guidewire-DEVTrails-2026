@@ -18,10 +18,15 @@ class PremiumEngine:
         r_score_beta = 0.5 # beta (how much discount per r_score point)
         p_floor = tier_coverage_amount * 0.005 # Absolute min premium 0.5%
         
-        w_credit = min(worker.wallet_balance, 50.0) # Use up to 50 Rs from wallet
-        
-        premium = (expected_loss * (1 + systemic_risk_margin)) + base_opex - (worker.r_score * r_score_beta) - w_credit
-        premium = max(premium, p_floor)
+        premium_before_wallet = (
+            (expected_loss * (1 + systemic_risk_margin))
+            + base_opex
+            - (worker.r_score * r_score_beta)
+        )
+        balance = float(worker.wallet_balance or 0.0)
+        # Apply wallet toward premium (full balance usable for plans)
+        w_credit = min(balance, premium_before_wallet)
+        premium = max(premium_before_wallet - w_credit, 0.0)
         
         return {
             "premium_amount": round(premium, 2),

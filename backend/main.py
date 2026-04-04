@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 import datetime
+from datetime import datetime, timedelta
 import uvicorn
 import logging
 
@@ -12,6 +13,8 @@ import config
 from database import engine, get_db
 from premium_engine import PremiumEngine
 from demo_mode import DemoModeController, DemoScenario
+from scheduler import start_scheduler
+import traceback
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -25,6 +28,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ==================== AI CHAT ENDPOINT ====================
+
+@app.post("/ai-chat", response_model=schemas.AIChatResponse)
+def ai_chat(body: schemas.AIChatRequest):
+    msg = body.message.lower()
+    ctx = body.context or {}
+    name = ctx.get("rider_name", "Partner")
+    has_policy = ctx.get("has_policy", False)
+    plan = ctx.get("plan_name", "No Active Plan")
+    balance = ctx.get("wallet_balance", 0)
+
+    # Simple keyword-based AI logic
+    if "hello" in msg or "hi" in msg:
+        resp = f"Hello {name}! I'm the Aegis Virtual Assistant. How can I help you with your income protection today?"
+    elif "payout" in msg or "claim" in msg or "money" in msg:
+        if has_policy:
+            resp = f"I see you're covered under the **{plan}**. Payouts are triggered automatically when weather or traffic data breaches your plan's thresholds. You can track all approved amounts in your **Wallet** tab."
+        else:
+            resp = "You don't have an active policy currently. Payouts only trigger when you have an active Shield plan. Check out the **Explore Plans** tab to get started!"
+    elif "refund" in msg:
+        resp = "Manual claim refunds are processed within 24-48 hours once our AI validates the disruption event. Approved funds are instantly credited to your Aegis Wallet."
+    elif "wallet" in msg or "balance" in msg:
+        resp = f"Your current Aegis Wallet balance is **₹{balance}**. You can use this for plan purchases or withdraw it to your bank account via UPI."
+    elif "upgrade" in msg:
+        resp = "You can upgrade your coverage anytime from the **Explore Plans** tab. Upgrading to a higher tier like Elite provides lower rain thresholds and higher payout limits!"
+    elif "thank" in msg:
+        resp = f"You're very welcome, {name}! Is there anything else you need help with?"
+    else:
+        resp = "That's a great question! As an Aegis Assistant, I can help you with policy details, automatic claim triggers, or wallet payouts. Could you please specify which part of the Aegis platform you're asking about?"
+
+    return {"response": resp}
 
 # ==================== WORKER ENDPOINTS ====================
 
@@ -109,58 +144,73 @@ def calculate_premium(request: schemas.PremiumRequest, db: Session = Depends(get
 
 @app.post("/create-policy", response_model=schemas.PolicyResponse)
 def create_policy(policy: schemas.PolicyCreate, db: Session = Depends(get_db)):
-    worker = db.query(models.Worker).filter(models.Worker.id == policy.worker_id).first()
-    if not worker:
-        raise HTTPException(status_code=404, detail="Worker not found")
+    try:
+        worker = db.query(models.Worker).filter(models.Worker.id == policy.worker_id).first()
+        if not worker:
+            raise HTTPException(status_code=404, detail="Worker not found")
+            
+        if not policy.accepted_terms:
+            raise HTTPException(status_code=400, detail="Must explicitly accept strict T&C to activate policy.")
         
-    if not policy.accepted_terms:
-        raise HTTPException(status_code=400, detail="Must explicitly accept strict T&C to activate policy.")
-    
-    worker.terms_accepted_at = datetime.datetime.utcnow()
-    
-    active_policy = db.query(models.Policy).filter(
-        models.Policy.worker_id == policy.worker_id,
-        models.Policy.status == "ACTIVE"
-    ).first()
-    
-    if active_policy:
-        return active_policy
+        worker.terms_accepted_at = datetime.utcnow()
+        
+        active_policy = db.query(models.Policy).filter(
+            models.Policy.worker_id == policy.worker_id,
+            models.Policy.status == "ACTIVE"
+        ).first()
+        
+        if active_policy:
+            if active_policy.tier == policy.tier:
+                return active_policy
+            else:
+                # Upgrade or switch plan: Cancel the old one. Overrides allow switching but user pays full price.
+                active_policy.status = "CANCELED_UPGRADED"
+                db.add(active_policy)
 
-    calc = PremiumEngine.calculate_weekly_premium(worker, 5000.0 if policy.tier == "Pro" else (8000.0 if policy.tier == "Elite" else 3000.0))
-    premium_paid = calc["premium_amount"]
-    coverage_amount = calc["coverage_amount"]
-    wallet_credit = calc["breakdown"]["wallet_credit_used"]
-
-    if wallet_credit > 0:
-        worker.wallet_balance -= wallet_credit
+        calc = PremiumEngine.calculate_weekly_premium(worker, 5000.0 if policy.tier == "Pro" else (8000.0 if policy.tier == "Elite" else 3000.0))
+        total_cost = calc["premium_amount"] + calc["breakdown"]["wallet_credit_used"]
+        coverage_amount = calc["coverage_amount"]
+        
+        if worker.wallet_balance < total_cost:
+            raise HTTPException(status_code=400, detail=f"Insufficient wallet balance (₹{worker.wallet_balance}) for this plan (₹{total_cost}). Please top up first.")
+        
+        worker.wallet_balance -= total_cost
         db.add(
             models.WalletLedger(
                 worker_id=worker.id,
-                amount=wallet_credit,
-                description=f"Weekly plan payment — wallet applied ({policy.tier})",
+                amount=total_cost,
+                description=f"Plan purchase: {policy.tier} coverage",
                 txn_type="DEBIT",
             )
         )
+        
+        premium_paid = total_cost
 
-    week_start = datetime.datetime.utcnow()
-    week_end = week_start + datetime.timedelta(days=7)
+        week_start = datetime.utcnow()
+        week_end = week_start + timedelta(days=7)
 
-    new_policy = models.Policy(
-        worker_id=worker.id,
-        tier=policy.tier,
-        week_start=week_start,
-        week_end=week_end,
-        coverage_amount=coverage_amount,
-        premium_paid=premium_paid,
-        status="ACTIVE"
-    )
-    
-    db.add(new_policy)
-    worker.wallet_balance += (premium_paid * 0.2)
-    
-    db.commit()
-    db.refresh(new_policy)
-    return new_policy
+        new_policy = models.Policy(
+            worker_id=worker.id,
+            tier=policy.tier,
+            week_start=week_start,
+            week_end=week_end,
+            coverage_amount=coverage_amount,
+            premium_paid=premium_paid,
+            status="ACTIVE"
+        )
+        
+        db.add(new_policy)
+        worker.wallet_balance += (premium_paid * 0.2)
+        
+        db.commit()
+        db.refresh(new_policy)
+        return new_policy
+    except HTTPException as e:
+        # Re-raise explicit HTTP exceptions
+        raise e
+    except Exception as e:
+        # Raise unexpected errors as 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/simulate-rebate/{worker_id}")
 def simulate_rebate(worker_id: int, db: Session = Depends(get_db)):
@@ -332,9 +382,6 @@ def list_demo_scenarios():
     }
 
 # ==================== STARTUP & SHUTDOWN ====================
-
-from scheduler import start_scheduler
-from datetime import datetime
 
 # ==================== INSTANT DEMO TRIGGERS (For Live Demonstrations) ====================
 
