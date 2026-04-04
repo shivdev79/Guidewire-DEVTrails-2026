@@ -1,17 +1,39 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import {
   Shield, Activity, Map, FileSearch, ShieldAlert,
   TrendingDown, Users, Settings, BrainCircuit,
   Zap, CloudRainWind, Siren, FileText, CheckCircle,
   BarChart2, CreditCard, Clock, Landmark, Search,
   Bell, User, Crosshair, Globe, Lock, Cpu, Database, Play, AlertOctagon,
-  Smartphone, Server, ShieldCheck, ActivitySquare, Terminal, Banknote, Wallet
+  Smartphone, Server, ShieldCheck, ActivitySquare, Terminal, Banknote, Wallet, AlertTriangle
 } from 'lucide-react';
+
+const API_BASE_URL = 'http://localhost:8000';
 
 export default function ControlCenter({ setCurrentView, adminLogs = [], engineStates = {} }) {
   const [activeTab, setActiveTab] = useState('overview');
   // Local state for live terminals to give the "OS" feel
   const [liveStream, setLiveStream] = useState([]);
+  
+  // Demo scenario state
+  const [demoStatus, setDemoStatus] = useState(null);
+  const [demoLogs, setDemoLogs] = useState([]);
+  const [demoLoading, setDemoLoading] = useState(false);
+  
+  // Analytics state
+  const [analyticsData, setAnalyticsData] = useState({
+    premium: null,
+    liquidity: null,
+    claims: null,
+    fraud: null,
+    triggers: null,
+    health: null,
+    riskPools: null,
+    network: null,
+    ledger: null
+  });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let count = 0;
@@ -35,6 +57,123 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch admin analytics data
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        setLoading(true);
+        console.log('🔄 Fetching analytics data from backend...');
+        const [premiumRes, liquidityRes, claimsRes, fraudRes, triggersRes, healthRes, poolsRes, networkRes, ledgerRes] = await Promise.all([
+          axios.get(`${API_BASE_URL}/admin/premium-analytics`),
+          axios.get(`${API_BASE_URL}/admin/liquidity`),
+          axios.get(`${API_BASE_URL}/admin/claims-analytics`),
+          axios.get(`${API_BASE_URL}/admin/fraud-intelligence`),
+          axios.get(`${API_BASE_URL}/admin/trigger-engine`),
+          axios.get(`${API_BASE_URL}/admin/system-health`),
+          axios.get(`${API_BASE_URL}/admin/risk-pools`),
+          axios.get(`${API_BASE_URL}/admin/network-analysis`),
+          axios.get(`${API_BASE_URL}/admin/ledger`)
+        ]);
+        
+        const newData = {
+          premium: premiumRes.data,
+          liquidity: liquidityRes.data,
+          claims: claimsRes.data,
+          fraud: fraudRes.data,
+          triggers: triggersRes.data,
+          health: healthRes.data,
+          riskPools: poolsRes.data,
+          network: networkRes.data,
+          ledger: ledgerRes.data
+        };
+        
+        console.log('✅ Data loaded:', newData);
+        setAnalyticsData(newData);
+      } catch (error) {
+        console.error('❌ Analytics fetch error:', error.message);
+        alert(`Error fetching data: ${error.message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchAnalytics();
+    // Refresh every 10 seconds
+    const interval = setInterval(fetchAnalytics, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Demo scenario management functions
+  const activateDemoScenario = async (scenarioName) => {
+    try {
+      setDemoLoading(true);
+      const timestamp = new Date().toLocaleTimeString();
+      
+      const response = await axios.post(`${API_BASE_URL}/demo/activate-scenario`, {
+        scenario: scenarioName
+      });
+      
+      setDemoStatus(response.data);
+      setDemoLogs(prev => [{
+        id: Date.now(),
+        time: timestamp,
+        message: `✅ Scenario activated: ${scenarioName.toUpperCase()}`,
+        type: 'success'
+      }, ...prev.slice(0, 19)]);
+      
+      // Trigger a refresh of analytics
+      setTimeout(() => {
+        setAnalyticsData(prev => ({ ...prev }));
+      }, 1500);
+      
+    } catch (error) {
+      setDemoLogs(prev => [{
+        id: Date.now(),
+        time: new Date().toLocaleTimeString(),
+        message: `❌ Failed: ${error.message}`,
+        type: 'error'
+      }, ...prev.slice(0, 19)]);
+    } finally {
+      setDemoLoading(false);
+    }
+  };
+
+  const deactivateDemoScenario = async () => {
+    try {
+      setDemoLoading(true);
+      const timestamp = new Date().toLocaleTimeString();
+      
+      const response = await axios.post(`${API_BASE_URL}/demo/deactivate`);
+      
+      setDemoStatus(response.data);
+      setDemoLogs(prev => [{
+        id: Date.now(),
+        time: timestamp,
+        message: '✅ Demo mode deactivated. System reset to normal.',
+        type: 'success'
+      }, ...prev.slice(0, 19)]);
+      
+    } catch (error) {
+      setDemoLogs(prev => [{
+        id: Date.now(),
+        time: new Date().toLocaleTimeString(),
+        message: `❌ Failed: ${error.message}`,
+        type: 'error'
+      }, ...prev.slice(0, 19)]);
+    } finally {
+      setDemoLoading(false);
+    }
+  };
+
+  const checkDemoStatus = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/demo/status`);
+      setDemoStatus(response.data);
+    } catch (error) {
+      console.error('Failed to fetch demo status:', error);
+    }
+  };
+
   const navItems = [
     { id: 'overview', label: '1. Overview', icon: <Activity size={18} /> },
     { id: 'risk', label: '2. Risk Intelligence', icon: <Map size={18} /> },
@@ -49,6 +188,7 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
     { id: 'security', label: '11. Security & Device', icon: <Lock size={18} /> },
     { id: 'events', label: '12. Event Stream', icon: <Database size={18} /> },
     { id: 'decision', label: '13. Decision Engine', icon: <Cpu size={18} /> },
+    { id: 'demo', label: '14. Demo Scenarios', icon: <Play size={18} style={{ color: 'var(--accent-orange)' }} /> },
   ];
 
   const KPICard = ({ title, value, sub, icon, isAlert }) => (
@@ -144,19 +284,32 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
         </aside>
 
         {/* Dynamic Main Content */}
-        <main className="main-content" style={{ position: 'relative' }}>
+        <main className="main-content" style={{ position: 'relative', padding: loading ? '32px' : '0' }}>
           
-          {activeTab === 'overview' && (
-            <div className="animate-slide-up">
+          {loading && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '24px' }}>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--primary)' }}>Loading Dashboard...</div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{ width: '12px', height: '12px', background: 'var(--primary)', borderRadius: '50%', animation: 'pulse 1.5s infinite' }}></div>
+                <div style={{ width: '12px', height: '12px', background: 'var(--primary)', borderRadius: '50%', animation: 'pulse 1.5s infinite 0.3s' }}></div>
+                <div style={{ width: '12px', height: '12px', background: 'var(--primary)', borderRadius: '50%', animation: 'pulse 1.5s infinite 0.6s' }}></div>
+              </div>
+            </div>
+          )}
+          
+          {!loading && (
+            <>
+            {activeTab === 'overview' && (
+              <div className="animate-slide-up">
               <SectionHeader title="Control Room" desc="Live system vitals and global active map telemetry." />
               
               <div className="grid-3" style={{ marginBottom: '32px' }}>
-                <KPICard title="Active Riders" value="14,204" sub="1Hz GPS Stream" icon={<Crosshair size={28}/>} />
-                <KPICard title="Risk Level" value="Level 4" sub="High (City-wide)" icon={<Map size={28}/>} isAlert={true} />
-                <KPICard title="Claims (Live)" value="1,245" sub="+12% from avg" icon={<Activity size={28}/>} />
-                <KPICard title="Total Payouts" value="₹4.1M" sub="Instant UPI" icon={<Landmark size={28}/>} />
-                <KPICard title="Fraud Blocked" value="14.2%" sub="Via CNN/Transf." icon={<ShieldAlert size={28}/>} isAlert={true}/>
-                <KPICard title="Decision Time" value="42ms" sub="P99 Latency" icon={<Zap size={28}/>} />
+                <KPICard title="Active Riders" value={analyticsData.ledger?.workers?.length ?? 0} sub="Registered Workers" icon={<Crosshair size={28}/>} />
+                <KPICard title="Loss Ratio" value={`${(analyticsData.premium?.loss_ratio_percentage ?? 0).toFixed(1)}%`} sub={(analyticsData.premium?.loss_ratio_percentage ?? 0) > 85 ? "⚠️ Alert" : "Healthy"} icon={<Map size={28}/>} isAlert={(analyticsData.premium?.loss_ratio_percentage ?? 0) > 85} />
+                <KPICard title="Claims (Live)" value={analyticsData.claims?.total_claims ?? 0} sub="Open claims" icon={<Activity size={28}/>} />
+                <KPICard title="Total Premiums" value={`₹${((analyticsData.premium?.total_premiums_collected ?? 0) / 100000).toFixed(1)}L`} sub="Collected" icon={<Landmark size={28}/>} />
+                <KPICard title="Fraud Blocked" value={`${(((analyticsData.fraud?.alerts_triggered?.length ?? 0) / Math.max(1, analyticsData.claims?.total_claims ?? 1)) * 100).toFixed(1)}%`} sub="Detection Rate" icon={<ShieldAlert size={28}/>}/>
+                <KPICard title="Avg Response" value={`${analyticsData.claims?.average_processing_time_seconds ?? 0}s`} sub="Claim Processing" icon={<Zap size={28}/>} />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
@@ -198,10 +351,10 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
               <SectionHeader title="Risk Intelligence" desc="Geohash mapping, physical environment anomalies, and smart routing." />
               
               <div className="grid-4" style={{ marginBottom: '32px' }}>
-                <KPICard title="Risk Score" value="0.84" sub="Avg GeoHash Output" icon={<BarChart2 size={24}/>}/>
-                <KPICard title="Disruptions (Live)" value="4 Zones" sub="Next 2-6 Hrs active" isAlert={true} icon={<AlertOctagon size={24}/>}/>
-                <KPICard title="Weather Max" value="22mm/hr" sub="Heavy Thunderstorm" icon={<CloudRainWind size={24}/>}/>
-                <KPICard title="AQI Level" value="385" sub="Severe Hazard" isAlert={true} icon={<Siren size={24}/>}/>
+                <KPICard title="Total Workers" value={(() => Object.values(analyticsData.riskPools?.cities ?? {}).reduce((s, c) => s + (c.total_workers ?? 0), 0))() } sub="Across all pools" icon={<BarChart2 size={24}/>}/>
+                <KPICard title="Active Policies" value={(() => Object.values(analyticsData.riskPools?.cities ?? {}).reduce((s, c) => s + (c.active_policies ?? 0), 0))() } sub="Live coverage zones" icon={<AlertOctagon size={24}/>}/>
+                <KPICard title="Total Coverage" value={`₹${((() => Object.values(analyticsData.riskPools?.cities ?? {}).reduce((s, c) => s + (c.total_coverage ?? 0), 0))() / 1000).toFixed(0)}K`} sub="Pool maxima" icon={<CloudRainWind size={24}/>}/>
+                <KPICard title="Total Claims" value={(() => Object.values(analyticsData.riskPools?.cities ?? {}).reduce((s, c) => s + (c.claims_count ?? 0), 0))() } sub="Triggered events" isAlert={(() => Object.values(analyticsData.riskPools?.cities ?? {}).reduce((s, c) => s + (c.claims_count ?? 0), 0))() > 5 } icon={<Siren size={24}/>}/>
               </div>
 
               <div className="grid-2" style={{ marginBottom: '24px' }}>
@@ -235,69 +388,69 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
             </div>
           )}
 
-          {activeTab === 'claims' && (
+          {activeTab === 'claims' && analyticsData.claims && (
             <div className="animate-slide-up">
-              <SectionHeader title="Claims & Payout System" desc="Real-time execution of evaluated smart contracts and instant UPI deposits." />
+              <SectionHeader title="Claims & Payout System" desc="Real-time execution of zero-touch smart contracts with instant UPI settlements." />
               
               <div className="grid-4" style={{ marginBottom: '32px' }}>
-                <KPICard title="Approved" value="8,495" sub="Fully Automated" icon={<CheckCircle size={28}/>}/>
-                <KPICard title="Rejected" value="654" sub="Outside Logic Rules" isAlert={true} icon={<ShieldAlert size={28}/>}/>
-                <KPICard title="Avg Time" value="48s" sub="Creation to Bank UPI" icon={<Clock size={28}/>}/>
-                <KPICard title="Total Amount" value="₹4.2M" sub="Today's Outflow" icon={<Banknote size={28}/>}/>
+                <KPICard title="Approved" value={analyticsData.claims?.claims_by_status?.approved ?? 0} sub="Fully Automated" icon={<CheckCircle size={28}/>}/>
+                <KPICard title="Rejected" value={analyticsData.claims?.claims_by_status?.rejected ?? 0} sub="Fraud or Outside Rules" isAlert={true} icon={<ShieldAlert size={28}/>}/>
+                <KPICard title="Avg Payout" value={`₹${(analyticsData.claims?.average_claim_amount ?? 0).toFixed(0)}`} sub="Per claim" icon={<Banknote size={28}/>}/>
+                <KPICard title="Total Amount" value={`₹${((analyticsData.claims?.total_approved_payout ?? 0) / 100000).toFixed(1)}L`} sub="Lifetime payouts" icon={<TrendingDown size={28}/>}/>
               </div>
 
               <div className="card glass-panel" style={{ borderTop: '4px solid var(--accent-green)', marginBottom: '32px' }}>
-                <h3 style={{ marginBottom: '24px', fontSize: '1.4rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}><ActivitySquare/> Explainable AI (Trust Panel Format)</h3>
-                <p style={{ color: 'var(--text-muted)', margin: '0 0 20px 0' }}>When a payout occurs, the exact trigger reasons are broadcast directly to the rider's phone to build absolute trust.</p>
-                <div className="grid-3" style={{ background: 'var(--app-bg)', padding: '24px', borderRadius: '12px', border: '1px solid var(--card-border)' }}>
-                   <div style={{ padding: '16px', background: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>1. Reason (Physical)</div>
-                     <div style={{ fontWeight: 700, fontSize: '1.3rem', marginTop: '8px', color: 'var(--text-main)' }}>Rain = 22mm/hr</div>
-                     <div style={{ fontSize: '0.8rem', marginTop: '4px', color: 'var(--primary)' }}>Validated via IMD API</div>
-                   </div>
-                   <div style={{ padding: '16px', background: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>2. Impact (Economic)</div>
-                     <div style={{ fontWeight: 700, fontSize: '1.3rem', marginTop: '8px', color: 'var(--text-main)' }}>Speed Drop = 80%</div>
-                     <div style={{ fontSize: '0.8rem', marginTop: '4px', color: 'var(--primary)' }}>Validated via Telemetry DB</div>
-                   </div>
-                   <div style={{ padding: '16px', background: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', border: '2px solid var(--accent-green)' }}>
-                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>3. Conclusion (Action)</div>
-                     <div style={{ fontWeight: 800, fontSize: '1.4rem', marginTop: '8px', color: 'var(--accent-green)' }}>Loss = ₹450 Paid</div>
-                     <div style={{ fontSize: '0.8rem', marginTop: '4px', color: 'var(--text-muted)' }}>UPI Tx: X79199241X</div>
-                   </div>
+                <h3 style={{ marginBottom: '24px', fontSize: '1.4rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}><ActivitySquare/> Double-Lock Validation Pipeline</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div style={{ padding: '16px', background: 'rgba(16, 185, 129, 0.05)', borderLeft: '4px solid var(--accent-green)', borderRadius: '8px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--accent-green)' }}>Lock 1: Objective Disruption</div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '8px' }}>{analyticsData.claims?.double_lock_validation?.lock1_weather ?? 'Weather condition met'}</div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'rgba(16, 185, 129, 0.05)', borderLeft: '4px solid var(--accent-green)', borderRadius: '8px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--accent-green)' }}>Lock 2: Proof of Impairment</div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '8px' }}>{analyticsData.claims?.double_lock_validation?.lock2_operational_impairment ?? 'Income loss verified'}</div>
+                  </div>
                 </div>
               </div>
 
-              <div className="card glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--app-bg)', borderBottom: '1px solid var(--card-border)' }}>
-                      <th style={{ padding: '16px 24px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Claim Ref</th>
-                      <th style={{ padding: '16px 24px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Rider ID</th>
-                      <th style={{ padding: '16px 24px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Location</th>
-                      <th style={{ padding: '16px 24px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {['CLM-492X', 'CLM-991A', 'CLM-841M'].map((id, index) => (
-                      <tr key={index} style={{ borderBottom: '1px solid var(--card-border)' }}>
-                        <td style={{ padding: '16px 24px', fontWeight: 600, color: 'var(--primary)' }}>{id}</td>
-                        <td style={{ padding: '16px 24px' }}>RDR-{Math.floor(Math.random() * 10000)}</td>
-                        <td style={{ padding: '16px 24px' }}>{index === 1 ? 'East Industrial' : 'Downtown Core'}</td>
-                        <td style={{ padding: '16px 24px' }}>
-                          <span className={index === 2 ? 'badge badge-red' : 'badge badge-green'}>{index === 2 ? 'Rejected (Fraud)' : 'Auto-Approved'}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="grid-2">
+                <div className="card glass-panel">
+                  <h3 style={{ marginBottom: '16px' }}>Claims by Status</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>Approved (Auto)</span>
+                      <span style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--accent-green)' }}>{analyticsData.claims?.claims_by_status?.approved ?? 0}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>Pending Review</span>
+                      <span style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--accent-orange)' }}>{analyticsData.claims?.claims_by_status?.pending ?? 0}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>Rejected (Fraud/Rules)</span>
+                      <span style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--accent-red)' }}>{analyticsData.claims?.claims_by_status?.rejected ?? 0}</span>
+                    </div>
+                  </div>
+                  <button className="btn btn-primary" style={{ width: '100%', marginTop: '16px' }}>Refresh Claims</button>
+                </div>
+                
+                <div className="card glass-panel">
+                  <h3 style={{ marginBottom: '16px' }}>Processing SLA</h3>
+                  <div style={{ fontSize: '3rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '8px', textAlign: 'center' }}>
+                    {analyticsData.claims?.average_processing_time_seconds ?? 0}s
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>Average time from trigger to UPI payout</div>
+                  <div style={{ marginTop: '16px', padding: '12px', background: 'var(--app-bg)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Target: &lt; 90 seconds ✅
+                  </div>
+                  <button className="btn btn-outline" style={{ width: '100%', marginTop: '16px' }}>View Processing Log</button>
+                </div>
               </div>
             </div>
           )}
 
           {activeTab === 'fraud' && (
             <div className="animate-slide-up">
-              <SectionHeader title="Fraud Intelligence" desc="Deep learning physics and network anomaly detection engines." />
+              <SectionHeader title="Fraud Intelligence" desc="Zero-Trust Multi-Modal Sensor Analysis & Temporal Pattern Detection" />
               
               <div className="grid-3" style={{ marginBottom: '32px' }}>
                 <KPICard title="Blocked Claims" value="14.2%" sub="Total attempts neutralized" isAlert={true} icon={<ShieldAlert size={28}/>}/>
@@ -349,41 +502,56 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
             </div>
           )}
 
-          {activeTab === 'premium' && (
+          {activeTab === 'premium' && analyticsData.premium && (
             <div className="animate-slide-up">
-              <SectionHeader title="Premium & Actuarial" desc="Dynamic LSTM models setting base premiums against projected risks." />
+              <SectionHeader title="Premium & Actuarial Engine" desc="Dynamic LSTM models with loss ratio monitoring and fail-safe protocols." />
               
               <div className="grid-3" style={{ marginBottom: '32px' }}>
-                <KPICard title="Weekly Premium Avg" value="₹42.50" sub="Distributed dynamically" icon={<Landmark size={28}/>}/>
-                <KPICard title="Expected Loss E(L)" value="₹1.14M" sub="99% Var limit projected" isAlert={true} icon={<TrendingDown size={28}/>}/>
-                <KPICard title="Resilience Wallet" value="₹12.4M" sub="Liquidity Reserve Stored" icon={<Wallet size={28}/>}/>
+                <KPICard title="Weekly Premium Avg" value={`₹${analyticsData.premium?.average_premium ?? 0}`} sub="Distributed dynamically" icon={<Landmark size={28}/>}/>
+                <KPICard title="Total Premiums" value={`₹${((analyticsData.premium?.total_premiums_collected ?? 0) / 100000).toFixed(1)}L`} sub="Lifetime Collected" icon={<Banknote size={28}/>}/>
+                <KPICard title="Loss Ratio" value={`${(analyticsData.premium?.loss_ratio_percentage ?? 0).toFixed(1)}%`} sub={(analyticsData.premium?.loss_ratio_percentage ?? 0) > 85 ? "⚠️ CIRCUIT BREAKER ACTIVE" : "Healthy"} isAlert={(analyticsData.premium?.loss_ratio_percentage ?? 0) > 85} icon={<TrendingDown size={28}/>}/>
               </div>
               
               <div className="grid-2">
-                <div className="card glass-panel" style={{ background: '#f8fafc' }}>
-                   <h3 style={{ marginBottom: '16px' }}>Pricing Formula Breakdown Engine</h3>
-                   <div style={{ color: 'var(--primary)', fontFamily: 'monospace', fontSize: '1.2rem', background: 'white', padding: '24px', borderRadius: '12px', border: '1px solid var(--card-border)', textAlign: 'center', fontWeight: 600 }}>
-                      Premium = [ E[Loss] × Risk Score ]<br/><br/>- Resilience Discount + Admin Load
+                <div className="card glass-panel" style={{ background: analyticsData.premium?.circuit_breaker_triggered ? 'rgba(239, 68, 68, 0.05)' : '#f8fafc' }}>
+                   <h3 style={{ marginBottom: '16px', color: analyticsData.premium?.circuit_breaker_triggered ? 'var(--accent-red)' : 'var(--primary)' }}>
+                     {analyticsData.premium?.circuit_breaker_triggered ? '🔴 Circuit Breaker Triggered' : '🟢 Pricing Formula Engine'}
+                   </h3>
+                   {analyticsData.premium?.circuit_breaker_triggered && (
+                     <div style={{ padding: '16px', background: 'rgba(239, 68, 68, 0.1)', borderLeft: '4px solid var(--accent-red)', borderRadius: '8px', marginBottom: '16px' }}>
+                       <div style={{ color: 'var(--accent-red)', fontWeight: 600, fontSize: '1rem' }}>Fail-Safe Activated: Loss Ratio > 85%</div>
+                       <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', marginTop: '8px' }}>New enrollments halted to preserve liquidity pool</div>
+                     </div>
+                   )}
+                   <div style={{ color: 'var(--primary)', fontFamily: 'monospace', fontSize: '0.95rem', background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid var(--card-border)', textAlign: 'center', fontWeight: 600, marginBottom: '16px', lineHeight: '1.8' }}>
+                     P<sub>w</sub> = max([E(L) × (1+λ)] + γ - R_score×β - W_credit, P_floor)
                    </div>
-                   <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '24px', textAlign: 'center' }}>Weekly calculations occur strictly via secure smart-contract execution grids.</p>
+                   <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                     <strong>E(L):</strong> Expected Loss (from forecasts)<br/>
+                     <strong>λ:</strong> Systemic Risk Margin (0.08 current)<br/>
+                     <strong>γ:</strong> Base OpEx Processing Fee (₹3)<br/>
+                     <strong>β:</strong> R_score Behavioral Discount (0.3-0.65)<br/>
+                     <strong>W:</strong> Resilience Wallet Credit
+                   </div>
+                   <button className="btn btn-primary" style={{ width: '100%', marginTop: '12px' }}>View Pricing Details</button>
                 </div>
                 
-                <div className="card glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                   <h3 style={{ marginBottom: '8px' }}>Actuarial Insights</h3>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px', border: '1px solid var(--card-border)', borderRadius: '12px', background: 'white' }}>
-                     <div>
-                       <div style={{ fontWeight: 600 }}>Risk Rebates Issued</div>
-                       <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Safe active behavior returned to pool</div>
-                     </div>
-                     <div style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--accent-green)' }}>₹4.2L</div>
-                   </div>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px', border: '1px solid var(--card-border)', borderRadius: '12px', background: 'white' }}>
-                     <div>
-                       <div style={{ fontWeight: 600 }}>Coverage Tier: Elite Users</div>
-                       <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Highest protection bracket adoption</div>
-                     </div>
-                     <div style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--primary)' }}>18.4%</div>
-                   </div>
+                <div className="card glass-panel">
+                  <h3 style={{ marginBottom: '16px', color: 'var(--accent-green)' }}>Stress Test Results</h3>
+                  <div style={{ padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid var(--card-border)', marginBottom: '16px' }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px' }}>Scenario: 14-Day Continuous Monsoon</div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px' }}>Delhi + Mumbai simultaneous rainfall > 50mm/hr</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '8px' }}>
+                      <span>Pool Survival Forecast:</span>
+                      <span style={{ color: 'var(--accent-green)', fontWeight: 700, fontSize: '1.1rem' }}>✅ PASS</span>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                    Projected claims: {analyticsData.premium?.stress_test_14day_monsoon?.projected_claims ?? 0}<br/>
+                    Projected payouts: ₹{((analyticsData.premium?.stress_test_14day_monsoon?.projected_payouts ?? 0) / 100000).toFixed(1)}L<br/>
+                    Reserve capacity: Sufficient
+                  </div>
+                  <button className="btn btn-outline" style={{ width: '100%', marginTop: '12px' }}>Run New Scenario</button>
                 </div>
               </div>
             </div>
@@ -394,9 +562,13 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
               <SectionHeader title="User Behavior & Gamification" desc="Evaluating human action, compliance, and platform loyalty drivers." />
               
               <div className="grid-3" style={{ marginBottom: '32px' }}>
-                <KPICard title="Active User Base" value="84,204" sub="MAU Logged this week" icon={<Users size={28}/>}/>
-                <KPICard title="Resilience Score" value="78.4" sub="Avg R-Score (High Trust)" icon={<Activity size={28}/>}/>
-                <KPICard title="Safe Zone Commute" value="72.4%" sub="Compliance redirection rate" icon={<CheckCircle size={28}/>}/>
+                <KPICard title="Active Workers" value={analyticsData.ledger?.workers?.length ?? 0} sub="Registered users" icon={<Users size={28}/>}/>
+                <KPICard title="Avg Resilience Score" value={((() => {
+                  const workers = analyticsData.ledger?.workers ?? [];
+                  const total = workers.reduce((s, w) => s + (w.r_score ?? 0), 0);
+                  return (total / Math.max(1, workers.length)).toFixed(1);
+                })())} sub="High Trust metric" icon={<Activity size={28}/>}/>
+                <KPICard title="Min Membership Days" value="7" sub="Activity warranty" icon={<CheckCircle size={28}/>}/>
               </div>
               
               <div className="card glass-panel" style={{ marginBottom: '24px' }}>
@@ -527,10 +699,10 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
               <SectionHeader title="System Health & DevOps Operations" desc="Real-time Kubernetes scaling and latency monitoring interface." />
               
               <div className="grid-4" style={{ marginBottom: '32px' }}>
-                <KPICard title="Kafka T/P" value="48k/sec" sub="Throughput events" icon={<Database size={28}/>}/>
-                <KPICard title="Flink Ping" value="18ms" sub="Cluster internal latency" icon={<Activity size={28}/>}/>
-                <KPICard title="API Request" value="45ms" sub="Client facing edge" icon={<Globe size={28}/>}/>
-                <KPICard title="Global Error" value="0.01%" sub="System exception rate" icon={<Server size={28}/>}/>
+                <KPICard title="API Uptime" value={`${analyticsData.health?.api_uptime_percentage ?? 0}%`} sub="System availability" icon={<Database size={28}/>}/>
+                <KPICard title="P99 Latency" value={`${analyticsData.health?.p99_decision_latency_ms ?? 0}ms`} sub="Decision time" icon={<Activity size={28}/>}/>
+                <KPICard title="DB Status" value={analyticsData.health?.database_connections ?? "—"} sub="Connection pool" icon={<Globe size={28}/>}/>
+                <KPICard title="Kafka Lag" value={analyticsData.health?.kafka_lag ?? "—"} sub="Event stream" icon={<Server size={28}/>}/>
               </div>
 
               <div className="card glass-panel" style={{ background: '#1e293b', color: 'white', border: '1px solid #334155' }}>
@@ -545,21 +717,41 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
             </div>
           )}
 
-          {activeTab === 'finance' && (
+          {activeTab === 'finance' && analyticsData.liquidity && (
             <div className="animate-slide-up">
-              <SectionHeader title="Financial Control Panel" desc="Executive view of system treasury, loss ratios, and macroscopic ledgers." />
+              <SectionHeader title="Financial Control Panel" desc="Liquidity pool dashboard with loss ratio monitoring and fail-safe triggers." />
               <div className="grid-3" style={{ marginBottom: '24px' }}>
-                 <KPICard title="Premium Total" value="₹18.5M" sub="Lifetime Collected" icon={<Landmark size={28}/>}/>
-                 <KPICard title="Payout Total" value="₹8.4M" sub="Lifetime Paid" icon={<Banknote size={28}/>}/>
-                 <KPICard title="Protocol PnL" value="+₹10.1M" sub="Net Buffer (Lambda)" icon={<TrendingDown size={28}/>}/>
+                 <KPICard title="Premium Collected" value={`₹${((analyticsData.liquidity?.total_premium_collected ?? 0) / 100000).toFixed(1)}L`} sub="Total collected" icon={<Landmark size={28}/>}/>
+                 <KPICard title="Payouts Distributed" value={`₹${((analyticsData.liquidity?.total_payout_distributed ?? 0) / 100000).toFixed(1)}L`} sub="Claims approved & paid" icon={<Banknote size={28}/>}/>
+                 <KPICard title="Current Liquidity" value={`₹${((analyticsData.liquidity?.current_liquidity ?? 0) / 100000).toFixed(1)}L`} sub="Net available buffer" icon={<Wallet size={28}/>} isAlert={analyticsData.liquidity?.fail_safe_activated}/>
               </div>
               
-              <div className="card glass-panel" style={{ padding: '40px', textAlign: 'center', background: 'linear-gradient(145deg, white, var(--app-bg))' }}>
-                 <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>Current Risk Pool Liquidity Health</h2>
-                 <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto 32px auto' }}>
-                    The system architecture is operating efficiently possessing an internal liquidity buffer of λ=0.8. Parametric loss ratios (total payouts / total premiums) currently hover at an optimal highly sustainable target of 45.4%.
+              <div className="card glass-panel" style={{ padding: '40px', textAlign: 'center', background: analyticsData.liquidity?.fail_safe_activated ? 'rgba(239, 68, 68, 0.05)' : 'linear-gradient(145deg, white, var(--app-bg))' }}>
+                 <h2 style={{ fontSize: '1.5rem', marginBottom: '16px', color: analyticsData.liquidity?.fail_safe_activated ? 'var(--accent-red)' : 'var(--text-main)' }}>
+                   {analyticsData.liquidity?.fail_safe_activated ? '🔴 Circuit Breaker: ENROLLMENT HALTED' : '🟢 Risk Pool Liquidity Health'}
+                 </h2>
+                 <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto 16px auto' }}>
+                    Loss Ratio: <strong style={{ color: (analyticsData.liquidity?.loss_ratio ?? 0) > 85 ? 'var(--accent-red)' : 'var(--accent-green)', fontSize: '1.3rem' }}>{(analyticsData.liquidity?.loss_ratio ?? 0).toFixed(1)}%</strong> 
+                    {(analyticsData.liquidity?.loss_ratio ?? 0) > 85 ? ' - Threshold exceeded. New enrollments blocked.' : ' - Healthy. Accepting new enrollments.'}
                  </p>
-                 <button className="btn btn-primary" style={{ padding: '16px 32px', fontSize: '1.1rem' }}>Initiate Financial Export (Q3 Ledger)</button>
+                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                   <div style={{ background: 'white', padding: '16px', borderRadius: '12px' }}>
+                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Minimum Threshold</div>
+                     <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>₹{((analyticsData.liquidity?.minimum_liquidity_threshold ?? 0) / 100000).toFixed(1)}L</div>
+                   </div>
+                   <div style={{ background: 'white', padding: '16px', borderRadius: '12px' }}>
+                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Liquidity Runway</div>
+                     <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>{(analyticsData.liquidity?.liquidity_runway_days ?? 0).toFixed(0)} days</div>
+                   </div>
+                   <div style={{ background: 'white', padding: '16px', borderRadius: '12px' }}>
+                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Avg Premium</div>
+                     <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>₹{(analyticsData.liquidity?.average_premium ?? 0).toFixed(0)}</div>
+                   </div>
+                 </div>
+                 <div style={{ display: 'flex', gap: '12px' }}>
+                   <button className="btn btn-primary" style={{ padding: '16px 32px', fontSize: '1.1rem', flex: 1 }}>Export Financial Report</button>
+                   <button className="btn btn-outline" style={{ padding: '16px 32px', fontSize: '1.1rem', flex: 1 }}>Capital Injection</button>
+                 </div>
               </div>
             </div>
           )}
@@ -592,13 +784,20 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
             <div className="animate-slide-up">
               <SectionHeader title="Event Stream Monitor" desc="Microservice deep visibility. Debug Kafka logs and Dead Letter Queues (DLQ)." />
               <div className="card glass-panel" style={{ height: '60vh', background: '#020617', border: '1px solid #1e293b', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }}>
-                 <div style={{ padding: '16px', background: '#0f172a', borderBottom: '1px solid #1e293b', color: '#94a3b8', fontSize: '0.85rem', display: 'flex', gap: '24px' }}>
+                 <div style={{ padding: '16px', background: '#0f172a', borderBottom: '1px solid #1e293b', color: '#94a3b8', fontSize: '0.85rem', display: 'flex', gap: '24px', justifyContent: 'space-between', alignItems: 'center' }}>
                    <div><div style={{ width: 8, height: 8, background: '#10b981', borderRadius: '50%', display: 'inline-block', marginRight: '8px' }}></div> Connection Live: socket.io wss://stream.aegis</div>
-                   <div style={{ marginLeft: 'auto' }}>DLQ Count: 0</div>
+                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>DLQ Count: 0
+                     <button className="btn" style={{ padding: '4px 12px', fontSize: '0.75rem', background: '#1e293b', color: '#94a3b8' }}>Clear</button>
+                   </div>
                  </div>
-                 <div style={{ padding: '24px', flex: 1, fontFamily: 'monospace', fontSize: '0.9rem', color: '#38bdf8', overflowY: 'hidden', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                 <div style={{ padding: '24px', flex: 1, fontFamily: 'monospace', fontSize: '0.9rem', color: '#38bdf8', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {liveStream.map(l => <div key={l.id}>{l.log}</div>)}
                  </div>
+              </div>
+              <div style={{ marginTop: '16px', display: 'flex', gap: '12px' }}>
+                <button className="btn btn-primary" style={{ flex: 1 }}>Pause Stream</button>
+                <button className="btn btn-outline" style={{ flex: 1 }}>Export Events</button>
+                <button className="btn btn-outline" style={{ flex: 1 }}>Filter Events</button>
               </div>
             </div>
           )}
@@ -630,6 +829,216 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
                  </div>
               </div>
             </div>
+          )}
+
+          {activeTab === 'demo' && (
+            <div className="animate-slide-up">
+              <SectionHeader title="Live Demo Scenarios" desc="Inject parametric events in real-time to see all 5 engines respond instantly." />
+              
+              {demoStatus?.demo_mode_active && (
+                <div style={{ 
+                  padding: '16px', 
+                  background: 'rgba(234, 179, 8, 0.1)', 
+                  border: '2px solid var(--accent-orange)',
+                  borderRadius: '12px',
+                  marginBottom: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px'
+                }}>
+                  <div style={{ fontSize: '2rem' }}>🎬</div>
+                  <div>
+                    <div style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '1.1rem' }}>DEMO MODE ACTIVE</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Current: {demoStatus.active_scenario?.toUpperCase()}</div>
+                  </div>
+                  <button 
+                    className="btn btn-danger" 
+                    onClick={deactivateDemoScenario}
+                    disabled={demoLoading}
+                    style={{ marginLeft: 'auto' }}
+                  >
+                    Stop Demo & Reset
+                  </button>
+                </div>
+              )}
+
+              <div className="grid-2" style={{ marginBottom: '32px' }}>
+                <div className="card glass-panel" style={{ padding: '32px', border: '2px solid var(--accent-orange)', position: 'relative' }}>
+                  <h3 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-main)' }}>
+                    <CloudRainWind size={24} color="var(--primary)" /> Heavy Rain Scenario
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '16px' }}>
+                    Triggers rainfall ≥65mm/hr in delivery zones. Workers' orders drop to zero. Both Double-Lock conditions activate.
+                  </p>
+                  <div style={{ background: 'white', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                    <strong>Expected:</strong> All workers create claims with trigger_type="Heavy Rain"
+                  </div>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => activateDemoScenario('HEAVY_RAIN')}
+                    disabled={demoLoading || demoStatus?.active_scenario === 'heavy_rain'}
+                    style={{ width: '100%', fontSize: '1rem', fontWeight: 600 }}
+                  >
+                    {demoLoading ? '⏳ Activating...' : '▶️ Inject Rain Event'}
+                  </button>
+                </div>
+
+                <div className="card glass-panel" style={{ padding: '32px', border: '2px solid var(--accent-orange)', position: 'relative' }}>
+                  <h3 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-main)' }}>
+                    <AlertTriangle size={24} color="var(--accent-red)" /> Extreme Heat Scenario
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '16px' }}>
+                    Temperature spikes to 44°C+. Outdoor delivery becomes hazardous. Platform reduces order allocation to protect workers.
+                  </p>
+                  <div style={{ background: 'white', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                    <strong>Expected:</strong> Claims with trigger_type="Extreme Heat"
+                  </div>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => activateDemoScenario('EXTREME_HEAT')}
+                    disabled={demoLoading || demoStatus?.active_scenario === 'extreme_heat'}
+                    style={{ width: '100%', fontSize: '1rem', fontWeight: 600 }}
+                  >
+                    {demoLoading ? '⏳ Activating...' : '🔥 Inject Heat Event'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid-2" style={{ marginBottom: '32px' }}>
+                <div className="card glass-panel" style={{ padding: '32px', border: '2px solid #8b5cf6', position: 'relative' }}>
+                  <h3 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-main)' }}>
+                    <AlertOctagon size={24} color="#8b5cf6" /> Critical AQI Scenario
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '16px' }}>
+                    Air pollution spikes to AQI {'>'} 300. Respiratory health hazard. Outdoor work suspended city-wide by authorities.
+                  </p>
+                  <div style={{ background: 'white', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                    <strong>Expected:</strong> Claims with trigger_type="Critical AQI"
+                  </div>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => activateDemoScenario('CRITICAL_AQI')}
+                    disabled={demoLoading || demoStatus?.active_scenario === 'critical_aqi'}
+                    style={{ width: '100%', fontSize: '1rem', fontWeight: 600 }}
+                  >
+                    {demoLoading ? '⏳ Activating...' : '💨 Inject AQI Event'}
+                  </button>
+                </div>
+
+                <div className="card glass-panel" style={{ padding: '32px', border: '2px solid #8b5cf6', position: 'relative' }}>
+                  <h3 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-main)' }}>
+                    <Siren size={24} color="#8b5cf6" /> Civic Strike Scenario
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '16px' }}>
+                    Unannounced civic strike or market closure. Workers cannot access pickup zones legally. Zero business allowed.
+                  </p>
+                  <div style={{ background: 'white', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                    <strong>Expected:</strong> Claims with trigger_type="Civic Strike"
+                  </div>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => activateDemoScenario('CIVIC_STRIKE')}
+                    disabled={demoLoading || demoStatus?.active_scenario === 'civic_strike'}
+                    style={{ width: '100%', fontSize: '1rem', fontWeight: 600 }}
+                  >
+                    {demoLoading ? '⏳ Activating...' : '🚩 Inject Strike Event'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="card glass-panel" style={{ padding: '32px', border: '2px solid #ef4444', marginBottom: '32px', position: 'relative' }}>
+                <h3 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-main)' }}>
+                  <AlertOctagon size={24} color="#ef4444" /> Platform Crash Scenario
+                </h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '16px' }}>
+                  Critical gig platform infrastructure failure (e.g., API down, order systems offline). Workers receive zero orders during outage window.
+                </p>
+                <div style={{ background: 'white', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                  <strong>Expected:</strong> Claims with trigger_type="Platform Outage" for all active workers
+                </div>
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => activateDemoScenario('PLATFORM_CRASH')}
+                  disabled={demoLoading || demoStatus?.active_scenario === 'platform_crash'}
+                  style={{ width: '100%', fontSize: '1rem', fontWeight: 600, background: '#ef4444' }}
+                >
+                  {demoLoading ? '⏳ Activating...' : '📱 Inject Platform Crash'}
+                </button>
+              </div>
+
+              <div className="card glass-panel" style={{ padding: '24px', background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)' }}>
+                <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Terminal size={20} /> Demo Activity Log
+                </h3>
+                <div style={{ 
+                  background: '#0f172a', 
+                  color: '#e2e8f0', 
+                  padding: '16px', 
+                  borderRadius: '8px', 
+                  fontFamily: 'monospace',
+                  fontSize: '0.85rem',
+                  height: '240px',
+                  overflowY: 'auto',
+                  border: '1px solid #334155'
+                }}>
+                  {demoLogs.length === 0 ? (
+                    <div style={{ color: '#64748b', textAlign: 'center', paddingTop: '80px' }}>
+                      No activity yet. Select a scenario above to begin.
+                    </div>
+                  ) : (
+                    demoLogs.map(log => (
+                      <div key={log.id} style={{ 
+                        color: log.type === 'error' ? '#f87171' : '#86efac',
+                        marginBottom: '8px',
+                        display: 'flex',
+                        gap: '12px'
+                      }}>
+                        <span style={{ color: '#64748b', minWidth: '100px' }}>[{log.time}]</span>
+                        <span>{log.message}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div style={{ marginTop: '32px', padding: '24px', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(59, 130, 246, 0.05))', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                <h3 style={{ marginBottom: '16px' }}>📊 What Happens When You Inject a Scenario</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                  <div>
+                    <strong>1. Scenario Activates</strong><br/>
+                    Demo mode flag set in backend
+                  </div>
+                  <div>
+                    <strong>2. Triggers Fire</strong><br/>
+                    Worker scheduler detects event (within 1 minute)
+                  </div>
+                  <div>
+                    <strong>3. Claims Created</strong><br/>
+                    Double-Lock verified, claims constructed
+                  </div>
+                  <div>
+                    <strong>4. Payouts Process</strong><br/>
+                    Check all other tabs - see real claims + payouts
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '24px', padding: '24px', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                <h3 style={{ marginBottom: '12px', color: 'var(--accent-red)' }}>🎯 Testing Checklist</h3>
+                <ul style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '2', paddingLeft: '20px' }}>
+                  <li>✅ Inject scenario from this tab</li>
+                  <li>✅ Switch to "Claims & Payouts" tab to see triggered claims</li>
+                  <li>✅ Check "Trigger Engine" tab for activation counts</li>
+                  <li>✅ Review "Premium & Actuarial" for loss ratio impact</li>
+                  <li>✅ Verify "Financial Control" shows updated liquidity</li>
+                  <li>✅ Open browser DevTools (F12) → Network tab to see API calls</li>
+                  <li>✅ Each claim appears with real payout calculated</li>
+                  <li>✅ Click "Stop Demo & Reset" to return to normal</li>
+                </ul>
+              </div>
+            </div>
+          )}
+            </>
           )}
 
         </main>

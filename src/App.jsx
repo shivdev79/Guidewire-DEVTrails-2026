@@ -345,6 +345,9 @@ export default function App() {
   ]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [parametricTriggerResult, setParametricTriggerResult] = useState(null);
+  const [parametricCity, setParametricCity] = useState('Mumbai');
+  const [parametricTriggerLoading, setParametricTriggerLoading] = useState(false);
 
   useEffect(() => {
     if (currentView === 'rider-dash' && !hasActivePolicy && !hasPromptedPlanToast) {
@@ -381,6 +384,51 @@ export default function App() {
     }, ...prev]);
     setManualClaim({ reason: 'Rain', description: '', amount: '' });
     setRiderTab('overview');
+  };
+
+  // Parametric Trigger Handlers (Location-Based Automatic Claims)
+  const handleParametricRainTrigger = async () => {
+    setParametricTriggerLoading(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/demo/parametric/heavy-rain-location`, {
+        city: parametricCity,
+        rainfall_mm: 65
+      });
+      setParametricTriggerResult(response.data);
+    } catch (error) {
+      console.error('Parametric trigger failed:', error);
+      alert('Trigger failed: ' + error.message);
+    }
+    setParametricTriggerLoading(false);
+  };
+
+  const handleParametricHeatTrigger = async () => {
+    setParametricTriggerLoading(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/demo/parametric/extreme-heat-location`, {
+        city: parametricCity,
+        temperature_c: 47
+      });
+      setParametricTriggerResult(response.data);
+    } catch (error) {
+      console.error('Parametric trigger failed:', error);
+      alert('Trigger failed: ' + error.message);
+    }
+    setParametricTriggerLoading(false);
+  };
+
+  const handleParametricStrikeTrigger = async () => {
+    setParametricTriggerLoading(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/demo/parametric/civic-strike-location`, {
+        city: parametricCity
+      });
+      setParametricTriggerResult(response.data);
+    } catch (error) {
+      console.error('Parametric trigger failed:', error);
+      alert('Trigger failed: ' + error.message);
+    }
+    setParametricTriggerLoading(false);
   };
 
   // Global condition simulator

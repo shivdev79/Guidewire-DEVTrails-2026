@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import asyncio
 import logging
+import random
 
 from database import engine, SessionLocal
 import models
@@ -64,7 +65,42 @@ def check_parametric_triggers():
             fraud_score, rej_reason = FraudEngine.run_zero_trust_checks(worker, past_claims_count)
             
             status = "REJECTED" if fraud_score >= 0.8 else "APPROVED"
-            payout = policy.coverage_amount * 0.5 if status == "APPROVED" else 0.0
+            
+            # Calculate payout based on WEEKLY PREMIUM × TRIGGER SEVERITY MULTIPLIER
+            # Customer pays 20-72 per week (actually 30/48/72 for Base/Pro/Elite tiers)
+            # When trigger occurs, claim = weekly_premium × severity_multiplier, capped at 500
+            if status == "APPROVED":
+                # Severity multiplier based on trigger type
+                # Different events have different economic impact multipliers
+                trigger_multipliers = {
+                    "Heavy Rain (>50mm/hr)": 8,                    # 8-10x = ₹240-720
+                    "Heavy Rain (65.5mm rain, 28.0°C)": 9,
+                    "Extreme Heat (>44°C)": 8,                     # 8-10x = ₹240-720
+                    "Extreme Heat (44°C+)": 9,
+                    "Critical AQI (>300)": 12,                     # 12-15x = ₹360-1080 (HIGHEST)
+                    "Critical AQI Spike (>300)": 13,
+                    "Civic Strike/Curfew": 12,                     # 10-14x = ₹300-1008 (severe)
+                    "Civic Strike": 11,
+                    "Platform Outage": 8,                          # 8-10x = ₹240-720
+                    "Flood (Barometric Drop)": 9,
+                }
+                
+                # Get base multiplier for this trigger type, add randomness
+                base_multiplier = trigger_multipliers.get(trigger_type, 8)
+                variance = random.uniform(-0.5, 1.5)  # Add variance
+                multiplier = max(base_multiplier + variance, 5)  # Min 5x
+                
+                # Weekly premium paid by customer (from policy record)
+                # This is the base price they agreed to (20-72 range for different tiers)
+                weekly_premium = policy.premium_paid if policy.premium_paid > 0 else 35
+                
+                # Calculate payout: weekly_premium × multiplier, hard capped at 500
+                payout = min(weekly_premium * multiplier, 500)
+                
+                # Round to nearest 50 for realistic payout values
+                payout = round(payout / 50) * 50
+            else:
+                payout = 0.0
             
             # 4. Create Immutable Claim Ledger Entry
             claim = models.Claim(
