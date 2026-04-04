@@ -3,6 +3,9 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase } from 'lucide-react';
 import ControlCenter from './ControlCenter';
+import Testimonials from './Testimonials';
+import InfoSection from './InfoSection';
+import Chatbot from './Chatbot';
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -689,6 +692,8 @@ export default function App() {
           </div>
         </div>
 
+        <InfoSection />
+        <Testimonials />
       </div>
     </div>
   </div>
@@ -2239,6 +2244,7 @@ export default function App() {
       {currentView === 'onboarding' && renderOnboarding()}
       {currentView === 'rider-dash' && renderRiderDashboard()}
       {currentView === 'admin-dash' && <ControlCenter setCurrentView={setCurrentView} adminLogs={adminLogs} engineStates={engineStates} injectScenario={injectScenario} resetEngines={resetEngines} />}
+      <Chatbot callbackPhone={riderInfo.mobile || ''} />
     </>
   );
 }
