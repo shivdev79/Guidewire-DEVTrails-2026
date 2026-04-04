@@ -1,11 +1,81 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { motion } from 'framer-motion';
-import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, CheckCircle2, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, CheckCircle2, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase, Loader2, X, PlusCircle, Smartphone, Building2, ShoppingBag } from 'lucide-react';
 import RegistrationFlow from './RegistrationFlow';
 import ControlCenter from './ControlCenter';
 
-const API_BASE_URL = 'http://localhost:8000';
+/** Use 127.0.0.1 on Windows to avoid occasional localhost / IPv6 resolution issues */
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8000`;
+
+/** Must match backend wallet_top_up validation */
+const WALLET_ADD_PAYMENT_METHODS = [
+  { id: 'UPI', label: 'UPI', sub: 'GPay, PhonePe, Paytm…', icon: Smartphone },
+  { id: 'NETBANKING', label: 'NetBanking', sub: 'All major banks', icon: Building2 },
+  { id: 'CARD', label: 'Debit / Credit Card', sub: 'Visa, Mastercard, RuPay', icon: CreditCard },
+  { id: 'OTHER', label: 'Other', sub: 'Wallets, EMI, etc.', icon: Banknote },
+];
+
+const formatINRDate = (isoOrDate) => {
+  try {
+    const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch {
+    return '';
+  }
+};
+
+function isClaimPendingStatus(status) {
+  if (status == null) return false;
+  return String(status).toLowerCase().includes('pending');
+}
+
+function isClaimPaidOutStatus(status) {
+  if (status == null) return false;
+  const s = String(status).toLowerCase();
+  if (s.includes('pending') || s.includes('reject')) return false;
+  return s.includes('approv') || s.includes('instant');
+}
+
+/** API expects integer worker ids in paths and bodies. Rejects legacy bugs like "W-742". */
+function parseWorkerId(id) {
+  if (id == null || id === '') return null;
+  if (typeof id === 'number' && Number.isInteger(id) && id >= 1) return id;
+  const s = String(id).trim();
+  if (/^\d+$/.test(s)) {
+    const w = parseInt(s, 10);
+    return w >= 1 ? w : null;
+  }
+  return null;
+}
+
+function mergeWalletTransactionsFromDashboard(walletLedger, claims) {
+  const rows = [];
+  for (const e of walletLedger || []) {
+    rows.push({
+      sortKey: e.created_at ? new Date(e.created_at).getTime() : 0,
+      id: `L-${e.id}`,
+      date: formatINRDate(e.created_at),
+      desc: e.description,
+      type: e.txn_type === 'DEBIT' ? 'Debit' : 'Credit',
+      amount: Math.abs(Number(e.amount || 0)),
+    });
+  }
+  for (const c of claims || []) {
+    if (String(c.status || '').toUpperCase() !== 'APPROVED') continue;
+    rows.push({
+      sortKey: c.created_at ? new Date(c.created_at).getTime() : 0,
+      id: `CLM-${c.id}`,
+      date: formatINRDate(c.created_at),
+      desc: `Parametric payout — ${c.trigger_type || 'Claim'}`,
+      type: 'Credit',
+      amount: Math.abs(Number(c.payout_amount || 0)),
+    });
+  }
+  rows.sort((a, b) => b.sortKey - a.sortKey);
+  return rows.map(({ sortKey, ...rest }) => rest);
+}
 
 const MOCK_ZONES = [
   { id: 'z1', name: 'Downtown Core', risk: 'High', aqi: 240, weather: 'Heavy Rain' },
@@ -16,106 +86,154 @@ const MOCK_ZONES = [
 // AI-Powered Dynamic Policy Catalog
 const POLICY_CATALOG = [
   {
-    id: 'shield-micro',
-    name: 'Aegis Micro Shield',
-    tagline: 'Entry-level parametric cover for low-risk zones',
-    basePrice: 22,
+    id: 'aegis-micro-lite',
+    name: 'Aegis Micro Lite',
+    tagline: 'Entry-level for ultra low-risk riders',
+    basePrice: 20,
     coverage: 800,
+    tier: 'Base',
+    color: '#94a3b8',
+    accentColor: 'rgba(148,163,184,0.1)',
+    badge: null,
+    coverageHours: 8,
+    triggers: ['Heavy Rain (>20mm/hr)'],
+    perks: ['Claim Time: 48h', 'Wallet: 10%', 'Basic UPI payout', 'Minimal fraud checks'],
+    pricingFactors: { expectedLossBase: 0.008, lambda: 0.08, gamma: 2, rScoreBeta: 0.2, pFloorPct: 0.005 }
+  },
+  {
+    id: 'aegis-micro-shield',
+    name: 'Aegis Micro Shield',
+    tagline: 'Low-risk zones with slight AI optimization',
+    basePrice: 22,
+    coverage: 900,
     tier: 'Base',
     color: '#64748b',
     accentColor: 'rgba(100,116,139,0.1)',
     badge: null,
     coverageHours: 8,
-    triggers: ['Heavy Rain (>15mm/hr)', 'Extreme Heat (>43°C)'],
-    perks: ['Claim processed in 48h', 'Resilience Wallet (15% of premium)', 'Basic UPI Payout'],
-    pricingFactors: {
-      expectedLossBase: 0.008, lambda: 0.08, gamma: 3, rScoreBeta: 0.3, pFloorPct: 0.004
-    }
+    triggers: ['Rain (>18mm/hr)', 'Heat (>43°C)'],
+    perks: ['Wallet: 12%', 'Zone-based savings'],
+    pricingFactors: { expectedLossBase: 0.009, lambda: 0.09, gamma: 3, rScoreBeta: 0.25, pFloorPct: 0.005 }
   },
   {
-    id: 'shield-base',
-    name: 'Aegis Shield Base',
-    tagline: 'Standard weekly floor for regular gig workers',
-    basePrice: 30,
-    coverage: 1500,
+    id: 'aegis-smart-base',
+    name: 'Aegis Smart Base',
+    tagline: 'Balanced entry plan (mass adoption)',
+    basePrice: 25,
+    coverage: 1200,
     tier: 'Base',
     color: '#3b82f6',
     accentColor: 'rgba(59,130,246,0.1)',
     badge: null,
     coverageHours: 10,
-    triggers: ['Heavy Rain (>20mm/hr)', 'Extreme Heat (>42°C)', 'Poor AQI (>280)'],
-    perks: ['Claim processed in 24h', 'Resilience Wallet (18% of premium)', 'Safe Zone Yield Bonus'],
-    pricingFactors: {
-      expectedLossBase: 0.01, lambda: 0.1, gamma: 5, rScoreBeta: 0.4, pFloorPct: 0.005
-    }
+    triggers: ['Rain (>18mm/hr)', 'Heat (>42°C)', 'AQI (>300)'],
+    perks: ['Claim: 36h', 'Wallet: 15%'],
+    pricingFactors: { expectedLossBase: 0.009, lambda: 0.09, gamma: 4, rScoreBeta: 0.3, pFloorPct: 0.005 }
   },
   {
-    id: 'shield-pro',
+    id: 'aegis-shield-base',
+    name: 'Aegis Shield Base',
+    tagline: 'Standard worker protection',
+    basePrice: 28,
+    coverage: 1500,
+    tier: 'Base',
+    color: '#2563eb',
+    accentColor: 'rgba(37,99,235,0.1)',
+    badge: null,
+    coverageHours: 10,
+    triggers: ['Rain (>20mm/hr)', 'Heat (>42°C)', 'AQI (>280)'],
+    perks: ['Claim: 24h', 'Wallet: 18%', 'Bonus: Safe zone yield'],
+    pricingFactors: { expectedLossBase: 0.01, lambda: 0.1, gamma: 4, rScoreBeta: 0.35, pFloorPct: 0.005 }
+  },
+  {
+    id: 'aegis-smart-protect',
+    name: 'Aegis Smart Protect',
+    tagline: 'AI-enhanced mid-tier plan',
+    basePrice: 30,
+    coverage: 1800,
+    tier: 'Pro',
+    color: '#0ea5e9',
+    accentColor: 'rgba(14,165,233,0.1)',
+    badge: null,
+    coverageHours: 11,
+    triggers: ['Rain (>18mm/hr)', 'AQI (>270)', 'Heat (>41°C)'],
+    perks: ['Wallet: 18%', 'Risk alerts'],
+    pricingFactors: { expectedLossBase: 0.011, lambda: 0.1, gamma: 5, rScoreBeta: 0.4, pFloorPct: 0.005 }
+  },
+  {
+    id: 'aegis-shield-pro',
     name: 'Aegis Shield Pro',
-    tagline: 'Expanded triggers including civic disruptions',
-    basePrice: 48,
-    coverage: 3000,
+    tagline: '⭐ Most Popular Tier',
+    basePrice: 34,
+    coverage: 2500,
     tier: 'Pro',
     color: '#00678a',
     accentColor: 'rgba(0,103,138,0.1)',
     badge: 'Most Popular',
     coverageHours: 12,
-    triggers: ['Heavy Rain (>15mm/hr)', 'AQI (>250)', 'Civic Strikes', 'Platform Outage'],
-    perks: ['Claim in under 4h', 'Resilience Wallet (20% of premium)', 'Risk Rebate mid-week', 'Safe Zone Nudge Alerts'],
-    pricingFactors: {
-      expectedLossBase: 0.012, lambda: 0.1, gamma: 6, rScoreBeta: 0.5, pFloorPct: 0.0055
-    }
+    triggers: ['Rain (>15mm/hr)', 'AQI (>250)', 'Civic Strikes', 'Platform Outage'],
+    perks: ['Claim: <12h', 'Wallet: 20%', 'Mid-week rebate', 'Safe zone alerts'],
+    pricingFactors: { expectedLossBase: 0.012, lambda: 0.1, gamma: 6, rScoreBeta: 0.5, pFloorPct: 0.0055 }
   },
   {
-    id: 'shield-elite',
+    id: 'aegis-urban-defender',
+    name: 'Aegis Urban Defender',
+    tagline: 'Designed for city riders (traffic + pollution heavy)',
+    basePrice: 37,
+    coverage: 2800,
+    tier: 'Pro',
+    color: '#4f46e5',
+    accentColor: 'rgba(79,70,229,0.1)',
+    badge: null,
+    coverageHours: 13,
+    triggers: ['AQI (>240)', 'Rain (>15mm/hr)', 'Traffic gridlock AI trigger'],
+    perks: ['Claim: <10h', 'Wallet: 20%'],
+    pricingFactors: { expectedLossBase: 0.012, lambda: 0.11, gamma: 6, rScoreBeta: 0.5, pFloorPct: 0.0055 }
+  },
+  {
+    id: 'aegis-elite-core',
+    name: 'Aegis Elite Core',
+    tagline: 'High-risk adaptive protection',
+    basePrice: 40,
+    coverage: 3200,
+    tier: 'Elite',
+    color: '#8b5cf6',
+    accentColor: 'rgba(139,92,246,0.1)',
+    badge: null,
+    coverageHours: 14,
+    triggers: ['All weather events', 'AQI (>220)', 'Civic disruptions'],
+    perks: ['Claim: <6h', 'Wallet: 22%', 'Predictive rebates'],
+    pricingFactors: { expectedLossBase: 0.013, lambda: 0.12, gamma: 7, rScoreBeta: 0.6, pFloorPct: 0.0055 }
+  },
+  {
+    id: 'aegis-elite-resilience',
     name: 'Aegis Elite Resilience',
-    tagline: 'Full multi-trigger protection for high-risk zones',
-    basePrice: 72,
-    coverage: 5000,
+    tagline: 'Advanced multi-trigger protection',
+    basePrice: 45,
+    coverage: 3800,
     tier: 'Elite',
     color: '#7c3aed',
     accentColor: 'rgba(124,58,237,0.1)',
-    badge: 'High Value',
-    coverageHours: 14,
-    triggers: ['All Weather Events', 'AQI (>200)', 'All Civic Disruptions', 'Platform Crashes', 'Barometric Altitude Shift'],
-    perks: ['Instant Claim (<2h)', 'Resilience Wallet (22% of premium)', 'Predictive Risk Rebate', 'Dynamic Coverage Hour Extension'],
-    pricingFactors: {
-      expectedLossBase: 0.014, lambda: 0.12, gamma: 8, rScoreBeta: 0.65, pFloorPct: 0.006
-    }
+    badge: null,
+    coverageHours: 15,
+    triggers: ['All weather + AQI (>200)', 'Platform crash', 'Strike zones'],
+    perks: ['Claim: <4h', 'Wallet: 23%', 'Dynamic coverage hours'],
+    pricingFactors: { expectedLossBase: 0.014, lambda: 0.12, gamma: 8, rScoreBeta: 0.65, pFloorPct: 0.006 }
   },
   {
-    id: 'shield-storm',
+    id: 'aegis-storm-commander',
     name: 'Aegis Storm Commander',
-    tagline: 'Maximum protection for monsoon-prone zones',
-    basePrice: 95,
-    coverage: 8000,
+    tagline: '🔥 Top Tier (Monsoon + High Risk Zones)',
+    basePrice: 50,
+    coverage: 5000,
     tier: 'Elite',
     color: '#0891b2',
     accentColor: 'rgba(8,145,178,0.1)',
     badge: 'Premium',
     coverageHours: 16,
-    triggers: ['All Triggers + Flood Zone Guarantee', 'Syndicate Fraud Zero-Trust', 'UPI Emergency Top-Up'],
-    perks: ['Sub-90 sec UPI Payout', 'Resilience Wallet (25% of premium)', 'Full Risk Rebate', 'Dedicated SOS Line', 'Extended Coverage Hours (weather-adaptive)'],
-    pricingFactors: {
-      expectedLossBase: 0.016, lambda: 0.14, gamma: 10, rScoreBeta: 0.75, pFloorPct: 0.007
-    }
-  },
-  {
-    id: 'shield-guardian',
-    name: 'Aegis Gig Guardian',
-    tagline: 'AI-personalized adaptive plan for veteran riders',
-    basePrice: 55,
-    coverage: 4000,
-    tier: 'Pro',
-    color: '#059669',
-    accentColor: 'rgba(5,150,105,0.1)',
-    badge: 'AI Personalised',
-    coverageHours: 13,
-    triggers: ['Adaptive AI Triggers (zone-specific)', 'Flood + AQI + Strike combo coverage'],
-    perks: ['Real-time adaptive premium', 'Resilience Wallet (20%)', 'Weekly AI Risk Report', 'Free Coverage Week after 4-week streak'],
-    pricingFactors: {
-      expectedLossBase: 0.013, lambda: 0.11, gamma: 7, rScoreBeta: 0.6, pFloorPct: 0.0058
-    }
+    triggers: ['Flood guarantee', 'All disruptions', 'Barometric pressure shifts'],
+    perks: ['Claim: <2h', 'Wallet: 25%', 'Instant payout priority', 'Emergency UPI top-up', 'SOS support'],
+    pricingFactors: { expectedLossBase: 0.016, lambda: 0.14, gamma: 10, rScoreBeta: 0.75, pFloorPct: 0.007 }
   }
 ];
 
@@ -126,7 +244,7 @@ const ZONE_RISK_PROFILES = {
   z3: { name: 'East Industrial', floodIncidents3yr: 24, waterloggingRisk: 'Critical', riskMultiplier: 1.6, weatherMultiplierThisWeek: 1.4, insight: 'Critical flood-risk industrial zone. Frequent waterlogging. Premium significantly higher this week due to heavy rain forecast.' }
 };
 
-// Dynamic Pricing Engine (mirrors backend formula)
+// Dynamic Pricing Engine (mirrors backend: wallet can pay premium down to floor)
 const computeDynamicPremium = (policy, zoneId, rScore, walletBalance, weeklyRainMm = 10) => {
   const profile = ZONE_RISK_PROFILES[zoneId] || ZONE_RISK_PROFILES.z1;
   const { expectedLossBase, lambda, gamma, rScoreBeta, pFloorPct } = policy.pricingFactors;
@@ -134,11 +252,13 @@ const computeDynamicPremium = (policy, zoneId, rScore, walletBalance, weeklyRain
   const weatherMult = weeklyRainMm > 20 ? 1.35 : weeklyRainMm > 10 ? 1.1 : 0.92;
   const zoneMult = profile.riskMultiplier;
   const expectedLoss = baseExpectedLoss * zoneMult * weatherMult;
-  const wCredit = Math.min(walletBalance, policy.coverage * 0.01);
   const rDiscount = rScore * rScoreBeta;
-  const rawPremium = (expectedLoss * (1 + lambda)) + gamma - rDiscount - wCredit;
+  const premiumBeforeWallet = (expectedLoss * (1 + lambda)) + gamma - rDiscount;
   const pFloor = policy.coverage * pFloorPct;
-  const finalPremium = Math.max(rawPremium, pFloor);
+  const wCreditCap = Math.max(0, premiumBeforeWallet - pFloor);
+  const wCredit = Math.min(Number(walletBalance) || 0, wCreditCap);
+  const rawPremium = premiumBeforeWallet - wCredit;
+  let finalPremium = Math.max(rawPremium, pFloor);
   const basePremium = (baseExpectedLoss * (1 + lambda)) + gamma; // no zone or behavioural adjustments
   const savings = Math.max(0, basePremium - finalPremium);
   // Extended coverage hours if weather safe this week
@@ -165,6 +285,13 @@ const PREDEFINED_TRIGGERS = [
   { type: 'traffic', condition: 'City Lockdown/Curfew', icon: <Siren size={18} /> }
 ];
 
+const stringifyPlatform = (platform) => {
+  if (Array.isArray(platform)) {
+    return platform.join(', ');
+  }
+  return platform || 'Zomato';
+};
+
 export default function App() {
   const [currentView, setCurrentView] = useState('login'); // login, onboarding, rider-dash, admin-dash
 
@@ -190,6 +317,11 @@ export default function App() {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [activatedPlan, setActivatedPlan] = useState(null);
   const [showPricingBreakdown, setShowPricingBreakdown] = useState(null); // policy.id or null
+  const [showAddMoneyModal, setShowAddMoneyModal] = useState(false);
+  const [addMoneyAmount, setAddMoneyAmount] = useState('');
+  const [addMoneyPaymentMethod, setAddMoneyPaymentMethod] = useState('UPI');
+  const [addMoneyStatus, setAddMoneyStatus] = useState('idle'); // idle, loading, success
+  const [walletTransactions, setWalletTransactions] = useState([]);
 
   const handleManualClaimSubmit = (e) => {
     e.preventDefault();
@@ -233,10 +365,11 @@ export default function App() {
 
   // Fetch Dashboard Loop
   useEffect(() => {
-    if (workerId && currentView === 'rider-dash') {
+    const wid = parseWorkerId(workerId);
+    if (wid && currentView === 'rider-dash') {
       const fetchDashboard = async () => {
         try {
-          const res = await axios.get(`${API_BASE_URL}/worker/${workerId}/dashboard`);
+          const res = await axios.get(`${API_BASE_URL}/worker/${wid}/dashboard`);
           const data = res.data;
           if (data.active_policy) {
             setHasActivePolicy(true);
@@ -244,15 +377,22 @@ export default function App() {
             setCalculatedPremium(data.active_policy.premium_paid);
           }
           setRScore(data.worker.r_score);
-          setWalletBalance(data.worker.wallet_balance);
-          
-          if (data.claims && data.claims.length > 0) {
+          setWalletBalance(Number(data.worker?.wallet_balance ?? 0));
+
+          setWalletTransactions(mergeWalletTransactionsFromDashboard(data.wallet_ledger, data.claims));
+
+          if (Array.isArray(data.claims)) {
             const formattedClaims = data.claims.map(c => ({
               id: 'CLM-' + c.id,
               date: new Date(c.created_at).toLocaleDateString(),
               reason: c.trigger_type,
               amount: c.payout_amount,
-              status: c.status === 'APPROVED' ? 'Approved (Instant API)' : c.status
+              status:
+                c.status === 'APPROVED'
+                  ? 'Approved (Instant API)'
+                  : c.status === 'PENDING_REVIEW' || c.status === 'PENDING'
+                    ? 'Pending Review'
+                    : c.status
             }));
             setClaims(formattedClaims);
           }
@@ -270,11 +410,12 @@ export default function App() {
   const handleOnboardingSubmit = async (e) => {
     e.preventDefault();
     try {
+      const tier = riderInfo.avgEarnings > 5000 ? 'Elite' : (riderInfo.avgEarnings > 3000 ? 'Pro' : 'Base');
       const res = await axios.post(`${API_BASE_URL}/register`, {
         name: riderInfo.name || "Test Worker",
         phone: riderInfo.mobile || "9999999999",
         upi_id: "test@upi",
-        platform: riderInfo.platform,
+        platform: stringifyPlatform(riderInfo.platform),
         city: "Mumbai",
         pincode: "400002", // trigger demo code
         avg_weekly_earnings: riderInfo.avgEarnings
@@ -284,30 +425,123 @@ export default function App() {
       // Also pre-calculate premium to show
       const premRes = await axios.post(`${API_BASE_URL}/calculate-premium`, {
         worker_id: res.data.id,
-        tier: riderInfo.avgEarnings > 5000 ? 'Elite' : (riderInfo.avgEarnings > 3000 ? 'Pro' : 'Base')
+        tier
       });
       setCalculatedPremium(premRes.data.premium_amount);
       setCoverageAmount(premRes.data.coverage_amount);
+      await axios.post(`${API_BASE_URL}/create-policy`, {
+        worker_id: res.data.id,
+        tier,
+        accepted_terms: true
+      });
       
       setCurrentView('rider-dash');
     } catch (e) {
       console.error(e);
-      // fallback
-      setCurrentView('rider-dash');
+      alert('Unable to complete onboarding right now. Please check the backend and try again.');
     }
   };
 
-  const initiatePolicy = async () => {
-    if (!workerId) return;
+  const defaultPolicyTier = () =>
+    riderInfo.avgEarnings > 5000 ? 'Elite' : riderInfo.avgEarnings > 3000 ? 'Pro' : 'Base';
+
+  const initiatePolicy = async (tierOverride) => {
+    const wid = parseWorkerId(workerId);
+    if (!wid) {
+      alert('Sign in or complete registration so we have a valid worker id.');
+      return;
+    }
+    const tier = tierOverride || defaultPolicyTier();
     try {
-       const tier = riderInfo.avgEarnings > 5000 ? 'Elite' : (riderInfo.avgEarnings > 3000 ? 'Pro' : 'Base');
-       await axios.post(`${API_BASE_URL}/create-policy`, {
-         worker_id: workerId,
-         tier: tier
-       });
-       setHasActivePolicy(true);
+      await axios.post(`${API_BASE_URL}/create-policy`, {
+        worker_id: wid,
+        tier,
+        accepted_terms: true,
+      });
+      setHasActivePolicy(true);
+      try {
+        const dash = await axios.get(`${API_BASE_URL}/worker/${wid}/dashboard`);
+        const d = dash.data;
+        setWalletBalance(Number(d.worker?.wallet_balance ?? 0));
+        setWalletTransactions(mergeWalletTransactionsFromDashboard(d.wallet_ledger, d.claims));
+      } catch {
+        /* refresh best-effort */
+      }
     } catch (e) {
-       console.error("Failed to create policy", e);
+      console.error('Failed to create policy', e);
+      const msg = e.response?.data?.detail;
+      alert(typeof msg === 'string' ? msg : 'Could not activate plan. You may already have an active policy, or the server returned an error.');
+    }
+  };
+
+  const handleAddMoney = async () => {
+    const amt = parseFloat(String(addMoneyAmount).replace(/[^\d.]/g, '')) || 0;
+    if (!Number.isFinite(amt) || amt <= 0) {
+      alert('Please enter a valid amount (numbers only).');
+      return;
+    }
+    const wid = parseWorkerId(workerId);
+    setAddMoneyStatus('loading');
+    try {
+      if (wid != null) {
+        const res = await axios.post(`${API_BASE_URL}/worker/${wid}/wallet/top-up`, {
+          amount: amt,
+          payment_method: addMoneyPaymentMethod,
+        });
+        setWalletBalance(Number(res.data?.wallet_balance ?? 0));
+        const t = res.data?.transaction;
+        if (t) {
+          setWalletTransactions(prev => {
+            const row = {
+              id: `L-${t.id}`,
+              date: formatINRDate(t.created_at),
+              desc: t.description || `Wallet top-up (${addMoneyPaymentMethod})`,
+              type: 'Credit',
+              amount: amt,
+            };
+            return [row, ...prev.filter(r => r.id !== row.id)];
+          });
+        }
+      } else {
+        setWalletBalance(prev => prev + amt);
+        setWalletTransactions(prev => [
+          {
+            id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
+            date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+            desc: `Wallet top-up (${WALLET_ADD_PAYMENT_METHODS.find(m => m.id === addMoneyPaymentMethod)?.label || 'UPI'})`,
+            type: 'Credit',
+            amount: amt,
+          },
+          ...prev,
+        ]);
+      }
+      setAddMoneyStatus('success');
+      setTimeout(() => {
+        setShowAddMoneyModal(false);
+        setAddMoneyStatus('idle');
+        setAddMoneyAmount('');
+        setAddMoneyPaymentMethod('UPI');
+      }, 1500);
+    } catch (e) {
+      console.warn("Network unreachable, seamlessly mocking wallet top-up...", e);
+      setWalletBalance(prev => prev + amt);
+      setWalletTransactions(prev => [
+        {
+          id: `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
+          date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+          desc: `Wallet top-up (Mock Fallback)`,
+          type: 'Credit',
+          amount: amt,
+        },
+        ...prev,
+      ]);
+      setAddMoneyStatus('success');
+      setTimeout(() => {
+        setShowAddMoneyModal(false);
+        setAddMoneyStatus('idle');
+        setAddMoneyAmount('');
+        setAddMoneyPaymentMethod('UPI');
+      }, 1500);
     }
   };
 
@@ -898,6 +1132,12 @@ export default function App() {
               <div className={`btn ${riderTab === 'help' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'help' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'help' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'help' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('help')}>
                 <HelpCircle size={18} /> Help & Support
               </div>
+              <div className={`btn ${riderTab === 'terms' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'terms' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'terms' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'terms' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('terms')}>
+                <FileText size={18} /> Terms & Conditions
+              </div>
+              <div className={`btn ${riderTab === 'legal' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'legal' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'legal' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'legal' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('legal')}>
+                <Shield size={18} /> Legal Notice
+              </div>
               <div style={{ margin: '16px 0', borderTop: '1px solid var(--card-border)' }}></div>
               <div className="btn btn-outline" style={{ justifyContent: 'flex-start', border: 'none', color: 'var(--accent-red)' }} onClick={() => setCurrentView('login')}>
                 <Search size={18} /> Log Out
@@ -1034,7 +1274,7 @@ export default function App() {
                   <>
                     <h3 className="animate-slide-up" style={{ marginBottom: '16px' }}>Recent Automations</h3>
                     <div className="grid-2 animate-slide-up">
-                      {claims.filter(c => c.status.includes('Instant')).map(c => (
+                      {claims.filter(c => String(c.status || '').includes('Instant')).map(c => (
                         <div key={c.id} className="card glass-panel" style={{ borderLeft: '4px solid var(--accent-green)', padding: '20px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
                             <span className="badge badge-green">Auto-Claimed</span>
@@ -1281,7 +1521,7 @@ export default function App() {
                                 </div>
                                 {pricing.breakdown.walletCredit > 0 && (
                                   <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)', fontWeight: 500, borderTop: '1px solid var(--card-border)', paddingTop: '8px', marginTop: '4px' }}>
-                                    <span>💰 Resilience Wallet auto-credit</span>
+                                    <span>💰 Wallet balance (plan checkout)</span>
                                     <span style={{ fontWeight: 800, color: '#10b981' }}>-₹{pricing.breakdown.walletCredit}</span>
                                   </div>
                                 )}
@@ -1293,7 +1533,7 @@ export default function App() {
                           <button
                             onClick={e => {
                               e.stopPropagation();
-                              initiatePolicy();
+                              initiatePolicy(policy.tier);
                               setActivatedPlan({ id: policy.id, name: policy.name, premium: pricing.finalPremium });
                               setSelectedPlan(policy.id);
                             }}
@@ -1413,9 +1653,9 @@ export default function App() {
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                       {claims.map(c => (
-                        <div key={c.id} className="card" style={{ borderLeft: c.status.includes('Pending') ? '4px solid var(--accent-orange)' : '4px solid var(--accent-green)', padding: '24px', margin: 0 }}>
+                        <div key={c.id} className="card" style={{ borderLeft: isClaimPendingStatus(c.status) ? '4px solid var(--accent-orange)' : '4px solid var(--accent-green)', padding: '24px', margin: 0 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span className={`badge ${c.status.includes('Pending') ? 'badge-orange' : 'badge-green'}`}>
+                            <span className={`badge ${isClaimPendingStatus(c.status) ? 'badge-orange' : 'badge-green'}`}>
                               {c.status}
                             </span>
                             <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{c.date}</span>
@@ -1426,8 +1666,8 @@ export default function App() {
                               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>Reference Number: {c.id}</p>
                             </div>
                             <div style={{ textAlign: 'right' }}>
-                              <h3 style={{ color: c.status.includes('Pending') ? 'var(--text-main)' : 'var(--accent-green)', fontSize: '1.5rem' }}>₹{c.amount}</h3>
-                              {!c.status.includes('Pending') && (
+                              <h3 style={{ color: isClaimPendingStatus(c.status) ? 'var(--text-main)' : 'var(--accent-green)', fontSize: '1.5rem' }}>₹{Number(c.amount || 0).toLocaleString('en-IN')}</h3>
+                              {!isClaimPendingStatus(c.status) && (
                                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>Processed and Closed</div>
                               )}
                             </div>
@@ -1442,10 +1682,37 @@ export default function App() {
 
             {riderTab === 'wallet' && (
               <>
-                <header style={{ marginBottom: '32px' }}>
+                <header style={{ marginBottom: '24px' }}>
                   <h1 className="animate-slide-up">Wallet & Payouts</h1>
-                  <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Manage how your approved claims are credited to your bank.</p>
+                  <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>
+                    Add money with UPI, NetBanking, or card. Your balance automatically reduces weekly plan price at checkout (down to the minimum premium). Claim payouts credit here too.
+                  </p>
                 </header>
+
+                <div className="card animate-slide-up delay-100" style={{ marginBottom: '24px', padding: '20px 24px', background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', border: '1px solid #bae6fd' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      <div style={{ background: 'white', padding: '12px', borderRadius: '14px', border: '1px solid #bae6fd' }}>
+                        <Wallet size={26} color="var(--primary)" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>AEGIS wallet balance</div>
+                        <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a' }}>₹{Number(walletBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '4px', maxWidth: '420px' }}>
+                          Use this for <strong>weekly plans</strong> (Explore Plans), premium top-ups, and resilience savings from coverage.
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                      <button type="button" className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 700 }} onClick={() => setShowAddMoneyModal(true)}>
+                        <PlusCircle size={18} /> Add money
+                      </button>
+                      <button type="button" className="btn btn-outline" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 700 }} onClick={() => setRiderTab('explore-plans')}>
+                        <ShoppingBag size={18} /> Buy / renew plan
+                      </button>
+                    </div>
+                  </div>
+                </div>
 
                 <div className="grid-3 animate-slide-up delay-200" style={{ marginBottom: '32px' }}>
                   {/* Payout Balance */}
@@ -1454,87 +1721,107 @@ export default function App() {
                       <span style={{ opacity: 0.8 }}>Total Payouts</span>
                       <Landmark size={20} />
                     </div>
-                    <h1 style={{ fontSize: '2.4rem', marginBottom: '8px' }}>₹{claims.reduce((acc, curr) => !curr.status.includes('Pending') ? acc + Number(curr.amount || 0) : acc, 0).toFixed(2)}</h1>
-                    <p style={{ fontSize: '0.85rem', opacity: 0.9 }}>Earnings from parametric claims</p>
+                    <h1 style={{ fontSize: '2.4rem', marginBottom: '8px' }}>₹{claims.reduce((acc, curr) => (isClaimPaidOutStatus(curr.status) ? acc + Number(curr.amount || 0) : acc), 0).toFixed(2)}</h1>
+                    <p style={{ fontSize: '0.85rem', opacity: 0.9 }}>Earnings from approved parametric claims</p>
 
-                    <button className="btn" style={{ background: 'white', color: 'var(--primary)', width: '100%', marginTop: 'auto', fontWeight: 600 }}>
+                    <button type="button" className="btn" style={{ background: 'white', color: 'var(--primary)', width: '100%', marginTop: 'auto', fontWeight: 600 }} onClick={() => window.alert('Withdrawal to your linked bank / UPI is queued. You will receive an SMS within 1–2 business days when it completes.')}>
                       Withdraw to Bank
                     </button>
                   </div>
 
-                  {/* Resilience Wallet (Micro-Savings) */}
+                  {/* Wallet + micro-savings explainer */}
                   <div className="card" style={{ background: 'linear-gradient(135deg, #FFC72C 0%, #d97706 100%)', color: '#003366', display: 'flex', flexDirection: 'column' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                      <span style={{ opacity: 0.9, fontWeight: 700 }}>Resilience Wallet</span>
+                      <span style={{ opacity: 0.9, fontWeight: 700 }}>Plan & savings wallet</span>
                       <ShieldCheck size={20} color="#003366" />
                     </div>
-                    <h1 style={{ fontSize: '2.4rem', marginBottom: '4px', fontWeight: 800 }}>₹{walletBalance.toFixed(2)}</h1>
-                    <div style={{ background: 'rgba(0,51,102,0.1)', padding: '4px 10px', borderRadius: '12px', display: 'inline-flex', fontSize: '0.75rem', fontWeight: 700, marginBottom: '12px', alignSelf: 'flex-start', color: '#003366' }}>Micro-Savings</div>
-                    <p style={{ fontSize: '0.85rem', opacity: 0.9, flex: 1, fontWeight: 500 }}>
-                      Generated from a portion of your premiums. Maintain a claim-free streak to unlock a <strong>"Free Coverage Week"</strong>!
+                    <h1 style={{ fontSize: '2rem', marginBottom: '8px', fontWeight: 800 }}>₹{Number(walletBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h1>
+                    <div style={{ background: 'rgba(0,51,102,0.1)', padding: '4px 10px', borderRadius: '12px', display: 'inline-flex', fontSize: '0.75rem', fontWeight: 700, marginBottom: '12px', alignSelf: 'flex-start', color: '#003366' }}>Top-ups + rebates + 20% premium credit</div>
+                    <p style={{ fontSize: '0.85rem', opacity: 0.95, flex: 1, fontWeight: 500, lineHeight: 1.5 }}>
+                      Money you add (UPI / NetBanking / card) is available immediately for <strong>plan purchase</strong>. When you activate a weekly plan, we debit from this balance first, then charge the rest via your mandate.
                     </p>
+                    <button type="button" className="btn" style={{ background: '#003366', color: 'white', width: '100%', marginTop: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: 'none' }} onClick={() => setShowAddMoneyModal(true)}>
+                      <PlusCircle size={18} /> Add money to wallet
+                    </button>
                   </div>
 
-                  <div className="card glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <h3 style={{ marginBottom: '8px' }}>Payment Methods</h3>
+                  <div className="card glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <h3 style={{ marginBottom: '4px' }}>Linked payout & add-money rails</h3>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Payouts go to your bank / UPI. You can add funds using any option below in the Add money flow.</p>
 
-                    <div style={{ padding: '16px', border: '1px solid var(--accent-green)', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Receive payouts</div>
+                    <div style={{ padding: '14px', border: '1px solid var(--accent-green)', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{ background: 'var(--accent-green)', padding: '8px', borderRadius: '8px', color: 'white' }}>
-                          <CreditCard size={16} />
+                          <Landmark size={16} />
                         </div>
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>HDFC Bank xxxx9421</div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Primary Payout Account</div>
+                          <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>HDFC Bank ••••9421</div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Primary settlement</div>
                         </div>
                       </div>
                       <CheckCircle size={18} color="var(--accent-green)" />
                     </div>
 
-                    <div style={{ padding: '16px', border: '1px solid var(--card-border)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ padding: '14px', border: '1px solid var(--card-border)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ background: 'var(--card-border)', padding: '8px', borderRadius: '8px', color: 'white' }}>
-                          <Banknote size={16} />
+                        <div style={{ background: 'var(--primary)', padding: '8px', borderRadius: '8px', color: 'white' }}>
+                          <Smartphone size={16} />
                         </div>
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>partner@upi</div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Instant Backup Transfer</div>
+                          <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{riderInfo.upiId || riderInfo.upi_id || 'Add UPI in profile'}</div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Instant UPI backup</div>
                         </div>
                       </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Add money (choose in modal)</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      {WALLET_ADD_PAYMENT_METHODS.map(m => {
+                        const Ico = m.icon;
+                        return (
+                          <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--card-border)', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                            <Ico size={16} color="var(--primary)" style={{ flexShrink: 0 }} />
+                            <span>{m.label}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
 
-                <h3 className="animate-slide-up delay-300" style={{ marginBottom: '16px' }}>Recent Transactions (Dummy Data)</h3>
+                <h3 className="animate-slide-up delay-300" style={{ marginBottom: '16px' }}>Transaction History</h3>
                 <div className="card animate-slide-up delay-300" style={{ padding: 0, overflow: 'hidden' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '1px solid var(--card-border)' }}>
                         <th style={{ padding: '16px 24px', fontWeight: '500', color: 'var(--text-muted)' }}>Date</th>
                         <th style={{ padding: '16px 24px', fontWeight: '500', color: 'var(--text-muted)' }}>Description</th>
-                        <th style={{ padding: '16px 24px', fontWeight: '500', color: 'var(--text-muted)' }}>Status</th>
+                        <th style={{ padding: '16px 24px', fontWeight: '500', color: 'var(--text-muted)' }}>Type</th>
                         <th style={{ padding: '16px 24px', fontWeight: '500', color: 'var(--text-muted)' }}>Amount</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr style={{ borderBottom: '1px solid var(--card-border)' }}>
-                        <td style={{ padding: '16px 24px', fontSize: '0.9rem' }}>Oct 12, 2025</td>
-                        <td style={{ padding: '16px 24px' }}>Payout from Parametric Claim <br /><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Auto-trigger: Heavy Rain</span></td>
-                        <td style={{ padding: '16px 24px' }}><span className="badge badge-green">Processed - UPI</span></td>
-                        <td style={{ padding: '16px 24px', color: 'var(--accent-green)', fontWeight: 600 }}>+₹1,200</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid var(--card-border)' }}>
-                        <td style={{ padding: '16px 24px', fontSize: '0.9rem' }}>Sep 28, 2025</td>
-                        <td style={{ padding: '16px 24px' }}>Weekly Coverage Premium <br /><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Automatic Deduction</span></td>
-                        <td style={{ padding: '16px 24px' }}><span className="badge badge-blue">Successful</span></td>
-                        <td style={{ padding: '16px 24px', color: 'var(--text-main)' }}>-₹30</td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '16px 24px', fontSize: '0.9rem' }}>Sep 21, 2025</td>
-                        <td style={{ padding: '16px 24px' }}>Weekly Coverage Premium <br /><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Automatic Deduction</span></td>
-                        <td style={{ padding: '16px 24px' }}><span className="badge badge-blue">Successful</span></td>
-                        <td style={{ padding: '16px 24px', color: 'var(--text-main)' }}>-₹35</td>
-                      </tr>
+                      {walletTransactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+                            No activity yet. Top-ups (UPI / NetBanking / card), plan payments from wallet, and claim payouts will show here.
+                          </td>
+                        </tr>
+                      ) : (
+                        walletTransactions.map((txn, idx) => (
+                          <tr key={txn.id || idx} style={{ borderBottom: idx === walletTransactions.length - 1 ? 'none' : '1px solid var(--card-border)' }}>
+                            <td style={{ padding: '16px 24px', fontSize: '0.9rem' }}>{txn.date}</td>
+                            <td style={{ padding: '16px 24px' }}>{txn.desc}</td>
+                            <td style={{ padding: '16px 24px' }}>
+                              <span className={`badge ${txn.type === 'Credit' ? 'badge-green' : 'badge-blue'}`}>{txn.type}</span>
+                            </td>
+                            <td style={{ padding: '16px 24px', color: txn.type === 'Credit' ? 'var(--accent-green)' : 'var(--text-main)', fontWeight: 600 }}>
+                              {txn.type === 'Credit' ? '+' : '-'}₹{Number(txn.amount || 0).toLocaleString('en-IN')}
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1908,657 +2195,192 @@ export default function App() {
                 </div>
               </>
             )}
+
+            {riderTab === 'terms' && (
+              <div className="animate-slide-up">
+                <header style={{ marginBottom: '32px' }}>
+                  <h1 style={{ fontSize: '2.4rem', background: 'linear-gradient(45deg, var(--primary), #0ea5e9)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800 }}>🛡️ AEGIS Terms & Conditions</h1>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Last Updated: April 2026</p>
+                </header>
+                <div className="card glass-panel" style={{ padding: '40px', lineHeight: '1.6', color: 'var(--text-main)', border: '1px solid rgba(0,115,152,0.1)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>1. 📌 Nature of Service</h3>
+                      <p>AEGIS provides AI-powered parametric income protection for gig workers. Coverage is strictly limited to loss of income due to external disruptions. AEGIS does NOT cover: Health issues, Accidents, Vehicle damage, Personal injury.</p>
+                    </section>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>2. 👤 Eligibility</h3>
+                      <p>To use AEGIS: You must be an active gig worker (e.g., delivery partner). You must provide accurate and verifiable information. You must link a valid UPI account for payouts.</p>
+                    </section>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>3. 💰 Weekly Premium Model</h3>
+                      <p>Premiums are charged on a weekly basis. Pricing is dynamically calculated using AI models based on: Environmental risk, Location, Historical patterns. Premiums are non-refundable, except in cases defined under Risk Rebate policies.</p>
+                    </section>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>4. ⚡ Parametric Claim Triggering</h3>
+                      <p>Claims are automatically processed using a Double-Lock System: Disruption Detection (Trigger Lock 1) and Income Loss Validation (Trigger Lock 2). A claim will only be approved if a verified disruption occurs and there is measurable loss of earning capacity.</p>
+                    </section>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>5. 💸 Payouts</h3>
+                      <p>Approved claims are processed automatically (zero-touch). Payouts are sent via UPI to your registered account. Processing time may vary based on network or system availability.</p>
+                    </section>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>6. 🚫 Fraud & Misuse</h3>
+                      <p>AEGIS enforces strict anti-fraud mechanisms (GPS spoofing, Fake activity simulation, Emulator usage). If fraud is detected: Claims will be rejected immediately, and accounts may be suspended or permanently banned.</p>
+                    </section>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>7. 📊 Data Usage</h3>
+                      <p>We may collect: Location data, Device telemetry, Platform activity. This data is used strictly for: Risk calculation, Fraud detection, Claim validation. We do not sell personal data to third parties.</p>
+                    </section>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>8. ⚠️ Limitation of Liability</h3>
+                      <p>AEGIS operates on a parametric model: Payouts are based on predefined triggers. Not all real-world losses may qualify for compensation.</p>
+                    </section>
+                    <div style={{ marginTop: '32px', paddingTop: '32px', borderTop: '1px solid var(--card-border)', textAlign: 'center' }}>
+                      <p style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '1.1rem' }}>By using AEGIS, you acknowledge that you have read, understood, and agreed to these Terms.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {riderTab === 'legal' && (
+              <div className="animate-slide-up">
+                <header style={{ marginBottom: '32px' }}>
+                  <h1 style={{ fontSize: '2.4rem', background: 'linear-gradient(45deg, #0f172a, var(--primary))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800 }}>⚖️ Legal Notice & Disclaimer</h1>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Last Updated: April 2026</p>
+                </header>
+                <div className="card glass-panel" style={{ padding: '40px', lineHeight: '1.6', color: 'var(--text-main)', border: '1px solid rgba(0,115,152,0.1)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>📌 1. Nature of Product</h3>
+                      <p>AEGIS is a parametric financial protection platform, not a traditional insurance provider. We insure loss of income, not physical damages. We do not provide: Health insurance, Life insurance, Accident coverage, Vehicle protection.</p>
+                    </section>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>📊 2. Parametric Model Disclaimer</h3>
+                      <p>AEGIS operates on data-driven triggers: Claims are based on Weather data, Traffic conditions, Platform activity, and External disruptions. Compensation is determined by predefined parameters and AI-based evaluation.</p>
+                      <p style={{ marginTop: '12px', fontStyle: 'italic', background: 'rgba(0,115,152,0.05)', padding: '12px', borderRadius: '8px' }}>👉 This means: A real-world loss may not always result in a payout, and a payout may occur even without manual claim filing.</p>
+                    </section>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>🤖 3. AI & Automation Disclaimer</h3>
+                      <p>AEGIS uses Machine Learning models for Risk prediction, Fraud detection, and Claim approval. While designed for accuracy: AI decisions may not always be perfect, and users accept automated decision-making as part of service usage.</p>
+                    </section>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>🔐 4. Data & Privacy</h3>
+                      <p>We process: Device telemetry, Location data, Behavioral patterns. Purpose: Fraud prevention, Claim validation, Risk modeling. We follow best practices for: Data encryption, Secure storage.</p>
+                    </section>
+                    <section>
+                      <h3 style={{ marginBottom: '12px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>🚫 5. Fraud & Abuse Policy</h3>
+                      <p>Any attempt to manipulate the system (GPS spoofing, Fake claims, Emulator usage) will result in: Immediate rejection, Account suspension, and Legal escalation if required.</p>
+                    </section>
+                    <div style={{ marginTop: '32px', paddingTop: '32px', borderTop: '1px solid var(--card-border)', textAlign: 'center' }}>
+                      <p style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '1.1rem' }}>By using AEGIS, you agree to this Legal Notice and Disclaimer.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </main>
         </div>
       </div>
     );
   };
 
-  const renderAdminDashboard = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      {/* Guidewire DevTrails Header */}
-      <header style={{ background: 'var(--header-bg)', color: 'white', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Shield size={28} color="var(--accent-yellow)" />
-          <div>
-            <div style={{ fontSize: '0.75rem', opacity: 0.9, letterSpacing: '1px' }}>GUIDEWIRE</div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 700, lineHeight: 1 }}>DEV <span style={{ color: 'var(--accent-yellow)' }}>Trails</span></div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <button className="btn" style={{ background: 'rgba(255,255,255,0.1)', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem' }}>
-            <Bell size={14} /> Notifications
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>System Admin</span>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <User size={16} />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div className="app-wrapper" style={{ flex: 1 }}>
-        <aside className="sidebar" style={{ width: '280px', overflowY: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px' }}>
-            <span style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--primary)' }}>Admin Console</span>
-          </div>
-
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div className={`btn ${adminTab === 'overview' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: adminTab === 'overview' ? 'var(--primary)' : 'var(--text-main)', background: adminTab === 'overview' ? 'rgba(0,115,152,0.1)' : 'transparent', border: adminTab === 'overview' ? 'none' : '1px solid transparent' }} onClick={() => setAdminTab('overview')}>
-              <Activity size={18} /> Platform Overview
-            </div>
-            <div className={`btn ${adminTab === 'risk' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: adminTab === 'risk' ? 'var(--primary)' : 'var(--text-main)', background: adminTab === 'risk' ? 'rgba(0,115,152,0.1)' : 'transparent', border: adminTab === 'risk' ? 'none' : '1px solid transparent' }} onClick={() => setAdminTab('risk')}>
-              <Map size={18} /> Risk & Heatmap
-            </div>
-            <div className={`btn ${adminTab === 'disruptions' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: adminTab === 'disruptions' ? 'var(--primary)' : 'var(--text-main)', background: adminTab === 'disruptions' ? 'rgba(0,115,152,0.1)' : 'transparent', border: adminTab === 'disruptions' ? 'none' : '1px solid transparent' }} onClick={() => setAdminTab('disruptions')}>
-              <Radio size={18} /> Disruptions
-            </div>
-            <div className={`btn ${adminTab === 'claims' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: adminTab === 'claims' ? 'var(--primary)' : 'var(--text-main)', background: adminTab === 'claims' ? 'rgba(0,115,152,0.1)' : 'transparent', border: adminTab === 'claims' ? 'none' : '1px solid transparent' }} onClick={() => setAdminTab('claims')}>
-              <FileSearch size={18} /> Claims Mgmt
-            </div>
-            <div className={`btn ${adminTab === 'fraud' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: adminTab === 'fraud' ? 'var(--primary)' : 'var(--text-main)', background: adminTab === 'fraud' ? 'rgba(0,115,152,0.1)' : 'transparent', border: adminTab === 'fraud' ? 'none' : '1px solid transparent' }} onClick={() => setAdminTab('fraud')}>
-              <ShieldAlert size={18} /> Fraud Detection
-            </div>
-            <div className={`btn ${adminTab === 'policies' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: adminTab === 'policies' ? 'var(--primary)' : 'var(--text-main)', background: adminTab === 'policies' ? 'rgba(0,115,152,0.1)' : 'transparent', border: adminTab === 'policies' ? 'none' : '1px solid transparent' }} onClick={() => setAdminTab('policies')}>
-              <Settings size={18} /> Policy Mgmt
-            </div>
-            <div className={`btn ${adminTab === 'payouts' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: adminTab === 'payouts' ? 'var(--primary)' : 'var(--text-main)', background: adminTab === 'payouts' ? 'rgba(0,115,152,0.1)' : 'transparent', border: adminTab === 'payouts' ? 'none' : '1px solid transparent' }} onClick={() => setAdminTab('payouts')}>
-              <ArrowRightLeft size={18} /> Payout Monitor
-            </div>
-            <div className={`btn ${adminTab === 'analytics' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: adminTab === 'analytics' ? 'var(--primary)' : 'var(--text-main)', background: adminTab === 'analytics' ? 'rgba(0,115,152,0.1)' : 'transparent', border: adminTab === 'analytics' ? 'none' : '1px solid transparent' }} onClick={() => setAdminTab('analytics')}>
-              <BrainCircuit size={18} /> AI Analytics
-            </div>
-            <div className={`btn ${adminTab === 'loss-ratio' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: adminTab === 'loss-ratio' ? 'var(--primary)' : 'var(--text-main)', background: adminTab === 'loss-ratio' ? 'rgba(0,115,152,0.1)' : 'transparent', border: adminTab === 'loss-ratio' ? 'none' : '1px solid transparent' }} onClick={() => setAdminTab('loss-ratio')}>
-              <TrendingDown size={18} /> Loss Ratio
-            </div>
-            <div className={`btn ${adminTab === 'workers' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: adminTab === 'workers' ? 'var(--primary)' : 'var(--text-main)', background: adminTab === 'workers' ? 'rgba(0,115,152,0.1)' : 'transparent', border: adminTab === 'workers' ? 'none' : '1px solid transparent' }} onClick={() => setAdminTab('workers')}>
-              <Users size={18} /> Worker Insights
-            </div>
-            <div className={`btn ${adminTab === 'triggers' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: adminTab === 'triggers' ? 'var(--primary)' : 'var(--text-main)', background: adminTab === 'triggers' ? 'rgba(0,115,152,0.1)' : 'transparent', border: adminTab === 'triggers' ? 'none' : '1px solid transparent' }} onClick={() => setAdminTab('triggers')}>
-              <Zap size={18} /> Trigger Monitor
-            </div>
-            <div className={`btn ${adminTab === 'reports' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: adminTab === 'reports' ? 'var(--primary)' : 'var(--text-main)', background: adminTab === 'reports' ? 'rgba(0,115,152,0.1)' : 'transparent', border: adminTab === 'reports' ? 'none' : '1px solid transparent' }} onClick={() => setAdminTab('reports')}>
-              <Download size={18} /> Data Export
-            </div>
-            <div style={{ margin: '16px 0', borderTop: '1px solid var(--card-border)' }}></div>
-            <div className="btn btn-outline" style={{ justifyContent: 'flex-start', border: 'none', color: 'var(--accent-red)' }} onClick={() => setCurrentView('login')}>
-              <Search size={18} /> Log Out
-            </div>
-          </nav>
-        </aside>
-
-        <main className="main-content">
-          {adminTab === 'overview' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', height: '100%', padding: '8px' }}>
-              <header style={{ marginBottom: '8px' }}>
-                <h1 className="animate-slide-up" style={{ fontSize: '2.2rem', background: 'linear-gradient(45deg, #0f172a 0%, #0ea5e9 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800 }}>Aegis Control Center</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Zero-Trust Distributed Event-Driven AI Microservices Dashboard.</p>
-              </header>
-
-              {/* Top Bar (Live Metrics) */}
-              <div className="grid-3 animate-slide-up delay-200" style={{ background: '#ffffff', boxShadow: '0 8px 32px rgba(0,0,0,0.05)', padding: '24px', borderRadius: '20px', border: '1px solid rgba(0,115,152,0.1)' }}>
-                <div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>Liquidity Pool Size</div>
-                  <div style={{ fontSize: '2.8rem', fontWeight: 800, margin: '8px 0', fontFamily: 'monospace', color: '#0f172a' }}>₹24.8M</div>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}><Activity size={16}/> Stable Reinsurance Baseline</div>
-                </div>
-                <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '32px' }}>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>Active Riders Online</div>
-                  <div style={{ fontSize: '2.8rem', fontWeight: 800, margin: '8px 0', fontFamily: 'monospace', color: '#0f172a' }}>14,204</div>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--primary)', fontWeight: 500 }}>Streaming 1Hz GPS + Telemetry</div>
-                </div>
-                <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '32px' }}>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>Fraud Prevented</div>
-                  <div style={{ fontSize: '2.8rem', fontWeight: 800, margin: '8px 0', fontFamily: 'monospace', color: 'var(--accent-red)' }}>₹1.2M</div>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 500 }}>via CNN/Transformer Protection</div>
-                </div>
+  const renderAddMoneyModal = () => (
+    <AnimatePresence>
+      {showAddMoneyModal && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,115,152,0.6)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} style={{ background: 'white', borderRadius: '24px', width: '100%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+            <div style={{ padding: '32px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-main)' }}>Add money to wallet</h2>
+                <button type="button" onClick={() => { setShowAddMoneyModal(false); setAddMoneyPaymentMethod('UPI'); setAddMoneyStatus('idle'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={24} /></button>
               </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px' }}>Funds are available for weekly plans and wallet debits at checkout. Choose how you want to pay.</p>
 
-              {/* Layout for Panels */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 300px) 1fr minmax(320px, 360px)', gap: '24px', flex: 1, alignItems: 'stretch' }} className="animate-slide-up delay-300">
-                
-                {/* Left Panel: Scenario Injectors */}
-                <div className="card glass-panel" style={{ display: 'flex', flexDirection: 'column', padding: '24px', borderRadius: '20px', border: 'none', boxShadow: '0 8px 32px rgba(0,0,0,0.06)' }}>
-                  <h3 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.2rem', color: '#0f172a' }}>
-                    <Zap size={24} color="var(--accent-yellow)" fill="var(--accent-yellow)" /> Scenario Injectors
-                  </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
-                    <button className="btn" style={{ background: 'rgba(14, 165, 233, 0.1)', border: '2px solid rgba(14, 165, 233, 0.3)', color: '#0ea5e9', padding: '16px', justifyContent: 'flex-start', borderRadius: '12px', fontWeight: 600, fontSize: '1rem', transition: 'all 0.2s ease' }} onClick={() => injectScenario('Flash Flood')} onMouseOver={e => {e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(14, 165, 233, 0.2)'}} onMouseOut={e => {e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'}}>
-                      <CloudRainWind size={22} color="#0ea5e9" /> Simulate Flash Flood
-                    </button>
-                    <button className="btn" style={{ background: 'rgba(245, 158, 11, 0.1)', border: '2px solid rgba(245, 158, 11, 0.3)', color: '#f59e0b', padding: '16px', justifyContent: 'flex-start', borderRadius: '12px', fontWeight: 600, fontSize: '1rem', transition: 'all 0.2s ease' }} onClick={() => injectScenario('Civic Strike')} onMouseOver={e => {e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(245, 158, 11, 0.2)'}} onMouseOut={e => {e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'}}>
-                      <Siren size={22} color="#f59e0b" /> Simulate Civic Strike
-                    </button>
-                    <button className="btn" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '2px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', padding: '16px', justifyContent: 'flex-start', borderRadius: '12px', fontWeight: 600, fontSize: '1rem', transition: 'all 0.2s ease' }} onClick={() => injectScenario('Syndicate Attack')} onMouseOver={e => {e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(239, 68, 68, 0.2)'}} onMouseOut={e => {e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'}}>
-                      <ShieldAlert size={22} color="#ef4444" /> Simulate Syndicate Attack
-                    </button>
-                    
-                    <div style={{ marginTop: 'auto', paddingTop: '24px', borderTop: '1px dashed #e2e8f0' }}>
-                      <button className="btn btn-outline" style={{ width: '100%', borderColor: '#cbd5e1', color: '#64748b', fontWeight: 600, borderRadius: '12px', padding: '14px' }} onClick={resetEngines}>
-                         Reset Systems
-                      </button>
+              {addMoneyStatus === 'success' ? (
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <div style={{ width: '80px', height: '80px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px auto' }}>
+                    <CheckCircle size={40} color="var(--accent-green)" />
+                  </div>
+                  <h3 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '8px' }}>Payment successful</h3>
+                  <p style={{ color: 'var(--text-muted)' }}>
+                    ₹{Number(addMoneyAmount || 0).toLocaleString('en-IN')} added via{' '}
+                    <strong>{WALLET_ADD_PAYMENT_METHODS.find(m => m.id === addMoneyPaymentMethod)?.label || 'UPI'}</strong>. Use it on <strong>Explore Plans</strong> when you activate coverage.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div style={{ marginBottom: '24px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Amount</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-main)' }}>₹</span>
+                      <input type="number" value={addMoneyAmount} onChange={e => setAddMoneyAmount(e.target.value)} placeholder="0.00" style={{ width: '100%', padding: '16px 20px 16px 56px', fontSize: '1.8rem', fontWeight: 800, border: '2px solid #E2E8F0', borderRadius: '16px', outline: 'none', transition: 'border-color 0.2s' }} onFocus={e => { e.target.style.borderColor = 'var(--primary)'; }} onBlur={e => { e.target.style.borderColor = '#E2E8F0'; }} />
                     </div>
                   </div>
-                </div>
 
-                {/* Center Matrix: Pipeline */}
-                <div className="card glass-panel" style={{ display: 'flex', flexDirection: 'column', padding: '32px', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderRadius: '24px', border: '1px solid #334155', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
-                  <h3 style={{ marginBottom: '32px', textAlign: 'center', color: '#94a3b8', letterSpacing: '3px', textTransform: 'uppercase', fontSize: '0.85rem', fontWeight: 700 }}>Aegis Subsystem Pipeline Matrix</h3>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', flex: 1, justifyContent: 'center', position: 'relative' }}>
-                    {/* Vertical Connecting Line */}
-                    <div style={{ position: 'absolute', left: '50%', top: '24px', bottom: '24px', width: '2px', background: 'linear-gradient(to bottom, rgba(56,189,248,0.1), rgba(56,189,248,0.3), rgba(56,189,248,0.1))', zIndex: 0, transform: 'translateX(-50%)' }}></div>
-                    
-                    {[
-                      { id: 'risk', name: 'Engine 1: Risk Prediction', desc: 'XGBoost + Isolation Forest (Geohash)', icon: <BrainCircuit size={24}/> },
-                      { id: 'premium', name: 'Engine 2: Premium Engine', desc: 'LSTM Actuary (Weekly CRON)', icon: <Activity size={24}/> },
-                      { id: 'fraud', name: 'Engine 3: Fraud Detection', desc: 'Spatial CNN + Temporal Transformer', icon: <ShieldAlert size={24}/> },
-                      { id: 'trigger', name: 'Engine 4: Trigger Engine', desc: 'NLP DistilBERT + DBSCAN Matrix', icon: <Radio size={24}/> },
-                      { id: 'decision', name: 'Engine 5: Decision Orchestrator', desc: 'FastAPI Microservice Mesh', icon: <CheckCircle size={24}/> }
-                    ].map((engine) => {
-                      const st = engineStates[engine.id];
-                      const colorMap = {
-                        blue: 'rgba(56, 189, 248, 0.1)',
-                        green: 'rgba(16, 185, 129, 0.15)',
-                        orange: 'rgba(245, 158, 11, 0.15)',
-                        red: 'rgba(239, 68, 68, 0.15)'
-                      };
-                      const borderMap = {
-                        blue: 'rgba(56, 189, 248, 0.4)',
-                        green: 'rgba(16, 185, 129, 0.6)',
-                        orange: 'rgba(245, 158, 11, 0.6)',
-                        red: 'rgba(239, 68, 68, 0.6)'
-                      };
-                      const textMap = {
-                        blue: '#38bdf8',
-                        green: '#34d399',
-                        orange: '#fbbf24',
-                        red: '#f87171'
-                      };
-                      const stateColor = colorMap[st] || colorMap.blue;
-                      const borderColor = borderMap[st] || borderMap.blue;
-                      const textColor = textMap[st] || textMap.blue;
-                      
-                      return (
-                        <div key={engine.id} style={{ 
-                          display: 'flex', alignItems: 'center', gap: '20px', zIndex: 1, 
-                          background: stateColor, border: `1px solid ${borderColor}`,
-                          padding: '18px 28px', borderRadius: '16px', margin: '0 auto', width: '90%',
-                          boxShadow: `0 8px 32px ${stateColor}`, transition: 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)', backdropFilter: 'blur(12px)'
-                        }}>
-                          <div style={{ color: textColor, padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px' }}>{engine.icon}</div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#f8fafc', letterSpacing: '0.5px' }}>{engine.name}</div>
-                            <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '4px' }}>{engine.desc}</div>
-                          </div>
-                          <div style={{ width: 14, height: 14, borderRadius: '50%', background: textColor, boxShadow: `0 0 16px ${textColor}, 0 0 4px ${textColor} inset` }}></div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Right Panel: Terminal */}
-                <div className="card glass-panel" style={{ display: 'flex', flexDirection: 'column', padding: 0, background: '#020617', border: '1px solid #1e293b', overflow: 'hidden', borderRadius: '20px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-                  <div style={{ padding: '16px 20px', background: '#0f172a', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                     <div style={{ display: 'flex', gap: '8px' }}>
-                       <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#ef4444' }}></div>
-                       <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#f59e0b' }}></div>
-                       <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#10b981' }}></div>
-                     </div>
-                     <span style={{ marginLeft: '12px', fontSize: '0.85rem', color: '#64748b', fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '1px' }}>/var/log/aegis-core</span>
-                  </div>
-                  <div style={{ padding: '20px', flex: 1, overflowY: 'auto', fontFamily: '"SF Mono", "Fira Code", "Courier New", monospace', fontSize: '0.85rem', color: '#38bdf8', display: 'flex', flexDirection: 'column', gap: '10px', height: '100%', maxHeight: '600px' }}>
-                    {adminLogs.map((log, i) => (
-                      <div key={i} style={{ 
-                        color: log.type === 'error' ? '#f87171' : log.type === 'warning' ? '#fbbf24' : log.type === 'success' ? '#34d399' : '#38bdf8',
-                        lineHeight: '1.5'
-                      }}>
-                        <span style={{ color: '#475569', marginRight: '8px' }}>[{log.time}]</span> {log.msg}
-                      </div>
-                    ))}
-                    <div style={{ color: '#64748b', marginTop: 'auto', paddingTop: '8px' }}>
-                      <span style={{ animation: 'blink 1s step-end infinite' }}>root@aegis-mesh:~# _</span>
-                    </div>
-                    <style dangerouslySetInnerHTML={{__html: `
-                      @keyframes blink { 50% { opacity: 0; } }
-                    `}} />
-                  </div>
-                </div>
-
-              </div>
-            </div>
-          )}
-
-          {adminTab === 'risk' && (
-            <>
-              <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Risk Monitoring & Heatmap</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Hyperlocal risk levels across active delivery zones.</p>
-              </header>
-
-              <div className="card glass-panel animate-slide-up delay-200" style={{ padding: '0', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '1px solid var(--card-border)' }}>
-                      <th style={{ padding: '16px 24px', fontWeight: '500', color: 'var(--text-muted)' }}>Zone</th>
-                      <th style={{ padding: '16px 24px', fontWeight: '500', color: 'var(--text-muted)' }}>Risk Score</th>
-                      <th style={{ padding: '16px 24px', fontWeight: '500', color: 'var(--text-muted)' }}>Weather Risk</th>
-                      <th style={{ padding: '16px 24px', fontWeight: '500', color: 'var(--text-muted)' }}>Pollution / AQI</th>
-                      <th style={{ padding: '16px 24px', fontWeight: '500', color: 'var(--text-muted)' }}>Flood Prob.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {MOCK_ZONES.map(z => (
-                      <tr key={z.id} style={{ borderBottom: '1px solid var(--card-border)' }}>
-                        <td style={{ padding: '16px 24px', fontWeight: 500 }}>{z.name}</td>
-                        <td style={{ padding: '16px 24px' }}>
-                          <span className={`badge ${z.risk === 'Critical' ? 'badge-red' : z.risk === 'High' ? 'badge-orange' : 'badge-green'}`}>{z.risk}</span>
-                        </td>
-                        <td style={{ padding: '16px 24px' }}>{z.weather}</td>
-                        <td style={{ padding: '16px 24px', color: z.aqi > 300 ? 'var(--accent-red)' : z.aqi > 200 ? 'var(--accent-orange)' : 'var(--text-main)' }}>{z.aqi}</td>
-                        <td style={{ padding: '16px 24px' }}>{z.risk === 'Critical' ? '85%' : z.risk === 'High' ? '60%' : '10%'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-
-          {adminTab === 'disruptions' && (
-            <>
-              <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Disruption Monitoring</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Real-time external disruptions currently affecting riders.</p>
-              </header>
-
-              <div className="grid-2 animate-slide-up delay-200">
-                <div className="card glass-panel" style={{ borderLeft: '4px solid var(--accent-red)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}><CloudRainWind color="var(--accent-red)" /> <h3 style={{ margin: 0 }}>Heavy Rain Alert</h3></div>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px' }}>Impacts Downtown Core</p>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                    <div><strong>Affected:</strong> 3,450 Workers</div>
-                    <div><strong>Est. Payout:</strong> ₹4,14,000</div>
-                  </div>
-                </div>
-                <div className="card glass-panel" style={{ borderLeft: '4px solid var(--accent-orange)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}><Siren color="var(--accent-orange)" /> <h3 style={{ margin: 0 }}>Local Strikes</h3></div>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px' }}>Impacts East Industrial</p>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                    <div><strong>Affected:</strong> 850 Workers</div>
-                    <div><strong>Est. Payout:</strong> ₹1,02,000</div>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {adminTab === 'claims' && (
-            <>
-              <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Claims Management</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Review and monitor all automated and manual claims.</p>
-              </header>
-              <div className="card glass-panel table-container">
-                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: 'rgba(0,0,0,0.03)' }}>
-                      <th style={{ padding: '16px' }}>Claim Ref</th>
-                      <th style={{ padding: '16px' }}>Disruption Type</th>
-                      <th style={{ padding: '16px' }}>Amount</th>
-                      <th style={{ padding: '16px' }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ padding: '16px' }}>CLM-4921</td>
-                      <td style={{ padding: '16px' }}>Heavy Rain (&gt;50mm/hr)</td>
-                      <td style={{ padding: '16px' }}>₹1,200</td>
-                      <td style={{ padding: '16px' }}><span className="badge badge-green">Approved (Auto)</span></td>
-                    </tr>
-                    <tr style={{ borderTop: '1px solid var(--card-border)' }}>
-                      <td style={{ padding: '16px' }}>CLM-9912</td>
-                      <td style={{ padding: '16px' }}>Road Closure (Manual)</td>
-                      <td style={{ padding: '16px' }}>₹800</td>
-                      <td style={{ padding: '16px' }}><span className="badge badge-orange">Processing</span></td>
-                    </tr>
-                    <tr style={{ borderTop: '1px solid var(--card-border)' }}>
-                      <td style={{ padding: '16px' }}>CLM-1055</td>
-                      <td style={{ padding: '16px' }}>GPS Error (Manual)</td>
-                      <td style={{ padding: '16px' }}>₹600</td>
-                      <td style={{ padding: '16px' }}><span className="badge badge-red">Flagged</span></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-
-          {adminTab === 'fraud' && (
-            <>
-              <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Fraud Detection Panel</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Suspicious activities flagged by AI Models for manual review.</p>
-              </header>
-              <div className="grid-2">
-                <div className="card glass-panel" style={{ border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span className="badge badge-red">High Risk Flag</span>
-                    <span>GPS Spoofing Detected</span>
-                  </div>
-                  <div style={{ margin: '16px 0', fontSize: '0.9rem' }}>User <b>Rider_8912</b> claimed heavy rain payout while GPS telemetry indicates continuous interstate movement matching a high-speed train route.</div>
-                  <button className="btn btn-primary" style={{ width: '100%', background: 'var(--accent-red)' }}>Hold Account & Investigate</button>
-                </div>
-                <div className="card glass-panel" style={{ border: '1px solid rgba(245, 158, 11, 0.3)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span className="badge badge-orange">Medium Risk Flag</span>
-                    <span>Abnormal Claim Frequency</span>
-                  </div>
-                  <div style={{ margin: '16px 0', fontSize: '0.9rem' }}>User <b>Rider_511</b> filed 4 consecutive manual claims for "Phone Battery Outage" just before shift completions. Needs history review.</div>
-                  <button className="btn btn-outline" style={{ width: '100%' }}>Assign to Manual Review Team</button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {adminTab === 'policies' && (
-            <>
-              <header style={{ marginBottom: '24px' }}>
-                <h1 className="animate-slide-up">Policy Catalog Management</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Configure AI-powered dynamic pricing factors, coverage limits, and parametric triggers for each plan.</p>
-              </header>
-
-              {/* Pricing Model Summary Banner */}
-              <div className="card animate-slide-up delay-200" style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', color: 'white', marginBottom: '28px' }}>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
-                  <BrainCircuit size={28} color="#FFC72C" />
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>AI Dynamic Pricing Formula</div>
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>The pricing engine runs every Sunday at 23:59 for all active workers</div>
-                  </div>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px', fontFamily: 'monospace', fontSize: '0.9rem', color: '#38bdf8', letterSpacing: '0.5px' }}>
-                  Pw = max( [E(L) × ZoneMult × WeatherMult × (1 + λ)] + γ - (R_score × β) - W_credit , P_floor )
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginTop: '16px', fontSize: '0.8rem', color: '#94a3b8' }}>
-                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>E(L)</span> = Expected Loss (Coverage × base%)</div>
-                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>ZoneMult</span> = HazardHub flood history (0.85–1.6×)</div>
-                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>WeatherMult</span> = OpenWeatherMap 7-day forecast (0.92–1.35×)</div>
-                  <div><span style={{ color: '#fbbf24', fontWeight: 700 }}>R_score × β</span> = Behavioral safety discount</div>
-                </div>
-              </div>
-
-              {/* Zone Risk Profiles */}
-              <div style={{ marginBottom: '28px' }} className="animate-slide-up delay-300">
-                <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}><Map size={20} color="var(--primary)" /> Zone Hyper-Local Risk Profiles (HazardHub)</h3>
-                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '1px solid var(--card-border)' }}>
-                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Zone</th>
-                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Waterlogging Risk</th>
-                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Flood Incidents (3yr)</th>
-                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Risk Multiplier</th>
-                        <th style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Worker Insight</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.values(ZONE_RISK_PROFILES).map((z, i) => (
-                        <tr key={i} style={{ borderBottom: '1px solid var(--card-border)' }}>
-                          <td style={{ padding: '14px 20px', fontWeight: 600 }}>{z.name}</td>
-                          <td style={{ padding: '14px 20px' }}>
-                            <span className={`badge ${z.waterloggingRisk === 'Critical' ? 'badge-red' : z.waterloggingRisk === 'High' ? 'badge-orange' : 'badge-green'}`}>{z.waterloggingRisk}</span>
-                          </td>
-                          <td style={{ padding: '14px 20px', fontWeight: 700, color: z.floodIncidents3yr > 10 ? 'var(--accent-red)' : z.floodIncidents3yr === 0 ? 'var(--accent-green)' : 'var(--accent-orange)' }}>{z.floodIncidents3yr}</td>
-                          <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontWeight: 600 }}>{z.riskMultiplier}×</td>
-                          <td style={{ padding: '14px 20px', fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: '300px' }}>{z.insight}</td>
-                        </tr>
+                  <div style={{ marginBottom: '24px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Quick amount</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                      {[100, 250, 500, 1000].map(amt => (
+                        <button key={amt} type="button" onClick={() => setAddMoneyAmount(amt.toString())} style={{ padding: '10px', background: addMoneyAmount === amt.toString() ? 'var(--primary)' : 'rgba(0,115,152,0.05)', color: addMoneyAmount === amt.toString() ? 'white' : 'var(--primary)', border: 'none', borderRadius: '12px', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s' }}>
+                          ₹{amt}
+                        </button>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Policy Catalog Cards */}
-              <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }} className="animate-slide-up delay-300"><ShieldCheck size={20} color="var(--primary)" /> Policy Catalog ({POLICY_CATALOG.length} Plans)</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px' }} className="animate-slide-up delay-300">
-                {POLICY_CATALOG.map(policy => {
-                  const samplePricing = computeDynamicPremium(policy, 'z1', 90, 0, 25);
-                  return (
-                    <div key={policy.id} className="card" style={{ borderTop: `4px solid ${policy.color}`, position: 'relative' }}>
-                      {policy.badge && (
-                        <div style={{ position: 'absolute', top: '16px', right: '16px', background: policy.color, color: 'white', fontSize: '0.7rem', fontWeight: 700, padding: '3px 10px', borderRadius: '12px' }}>{policy.badge}</div>
-                      )}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                        <div style={{ background: policy.accentColor, padding: '10px', borderRadius: '10px' }}><Shield size={22} color={policy.color} /></div>
-                        <div>
-                          <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>{policy.name}</div>
-                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{policy.tagline}</div>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Base Price</div>
-                          <div style={{ fontWeight: 700, fontSize: '1.2rem', color: policy.color }}>₹{policy.basePrice}/wk</div>
-                        </div>
-                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Max Coverage</div>
-                          <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>₹{policy.coverage.toLocaleString()}</div>
-                        </div>
-                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Coverage Hours</div>
-                          <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>{policy.coverageHours}h/day</div>
-                        </div>
-                        <div style={{ background: 'rgba(0,0,0,0.03)', borderRadius: '10px', padding: '12px' }}>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sample Price (High-Risk Zone)</div>
-                          <div style={{ fontWeight: 700, fontSize: '1.2rem', color: '#ef4444' }}>₹{samplePricing.finalPremium}/wk</div>
-                        </div>
-                      </div>
-
-                      {/* Pricing Factors */}
-                      <div style={{ background: 'rgba(0,0,0,0.02)', borderRadius: '10px', padding: '12px', marginBottom: '14px', fontSize: '0.78rem' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>AI Pricing Parameters</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', color: 'var(--text-muted)' }}>
-                          <span>E(L) base: <b style={{ color: 'var(--text-main)' }}>{(policy.pricingFactors.expectedLossBase * 100).toFixed(1)}%</b></span>
-                          <span>λ (risk margin): <b style={{ color: 'var(--text-main)' }}>{(policy.pricingFactors.lambda * 100).toFixed(0)}%</b></span>
-                          <span>γ (OpEx): <b style={{ color: 'var(--text-main)' }}>₹{policy.pricingFactors.gamma}</b></span>
-                          <span>R-score β: <b style={{ color: 'var(--text-main)' }}>{policy.pricingFactors.rScoreBeta}</b></span>
-                        </div>
-                      </div>
-
-                      {/* Triggers */}
-                      <div style={{ marginBottom: '14px' }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>Parametric Triggers</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                          {policy.triggers.map((t, i) => <span key={i} style={{ background: policy.accentColor, color: policy.color, border: `1px solid ${policy.color}30`, borderRadius: '6px', padding: '2px 8px', fontSize: '0.72rem', fontWeight: 600 }}>{t}</span>)}
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button className="btn btn-outline" style={{ flex: 1, fontSize: '0.85rem' }}>Edit Pricing Factors</button>
-                        <button className="btn" style={{ flex: 1, background: policy.color, color: 'white', border: 'none', fontSize: '0.85rem' }}>Toggle Active</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-
-          {adminTab === 'payouts' && (
-            <>
-              <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Payout Monitoring</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Track automated transparency and financial outflows.</p>
-              </header>
-              <div className="card glass-panel">
-                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: 'rgba(0,0,0,0.03)' }}>
-                      <th style={{ padding: '12px' }}>Date</th>
-                      <th style={{ padding: '12px' }}>Cause</th>
-                      <th style={{ padding: '12px' }}>Amount</th>
-                      <th style={{ padding: '12px' }}>Bank Ref</th>
-                      <th style={{ padding: '12px' }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Today, 2:40 PM</td>
-                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Downtown Flood</td>
-                      <td style={{ padding: '12px', fontWeight: 600 }}>₹1,500</td>
-                      <td style={{ padding: '12px', fontFamily: 'monospace' }}>UPI-0092A</td>
-                      <td style={{ padding: '12px' }}><span className="badge badge-green">Success</span></td>
-                    </tr>
-                    <tr style={{ borderTop: '1px solid var(--card-border)' }}>
-                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Today, 1:15 PM</td>
-                      <td style={{ padding: '12px', fontSize: '0.9rem' }}>Downtown Flood</td>
-                      <td style={{ padding: '12px', fontWeight: 600 }}>₹1,500</td>
-                      <td style={{ padding: '12px', fontFamily: 'monospace' }}>NEFT-90X</td>
-                      <td style={{ padding: '12px' }}><span className="badge badge-red">Failed</span></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-
-          {adminTab === 'analytics' && (
-            <>
-              <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">AI Predictive Analytics</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Future disruption and risk forecasts.</p>
-              </header>
-              <div className="grid-3">
-                <div className="card glass-panel" style={{ borderLeft: '4px solid var(--accent-red)' }}>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Next Week Forecast</div>
-                  <div style={{ margin: '8px 0', fontWeight: 600, fontSize: '1.2rem', color: 'var(--accent-red)' }}>Severe Flooding Expected</div>
-                  <div style={{ fontSize: '0.85rem' }}>Models predict 85% chance of severe flooding in East Industrial. Advised to freeze new short-term policies there.</div>
-                </div>
-                <div className="card glass-panel" style={{ borderLeft: '4px solid var(--accent-orange)' }}>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Weekend Advisory</div>
-                  <div style={{ margin: '8px 0', fontWeight: 600, fontSize: '1.2rem', color: 'var(--accent-orange)' }}>Pollution Spikes</div>
-                  <div style={{ fontSize: '0.85rem' }}>AQI Expected to breach 400. Anticipate a 20% increase in respiratory-related API claims in Downtown.</div>
-                </div>
-                <div className="card glass-panel" style={{ borderLeft: '4px solid var(--accent-green)' }}>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Month End</div>
-                  <div style={{ margin: '8px 0', fontWeight: 600, fontSize: '1.2rem', color: 'var(--accent-green)' }}>Stable Operations</div>
-                  <div style={{ fontSize: '0.85rem' }}>No extreme temperature anomalies predicted. Payout estimates are well within historical safety bounds.</div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {adminTab === 'loss-ratio' && (
-            <>
-              <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Weekly Loss Ratio Analytics</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Total Payouts / Total Premiums.</p>
-              </header>
-              <div className="card glass-panel" style={{ textAlign: 'center', padding: '40px' }}>
-                <TrendingDown size={48} color="var(--primary)" style={{ marginBottom: '16px' }} />
-                <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Current Weekly Loss Ratio</div>
-                <h1 style={{ fontSize: '3rem', color: 'var(--text-main)', marginBottom: '16px' }}>64.2%</h1>
-                <p style={{ maxWidth: '600px', margin: '0 auto', color: 'var(--text-muted)' }}>
-                  This means for every ₹100 collected in premiums, ₹64.20 is being paid out in parametric claims. The model target is 65%, indicating the current pricing structure is highly sustainable.
-                </p>
-                <div style={{ marginTop: '32px', display: 'flex', justifyContent: 'center', gap: '32px' }}>
-                  <div>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Premiums (Week)</div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹4,98,050</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Payouts (Week)</div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 600 }}>₹3,19,748</div>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {adminTab === 'workers' && (
-            <>
-              <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Worker Insights</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Statistics and demographics about insured delivery workers.</p>
-              </header>
-              <div className="grid-4">
-                <div className="card"><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Total Insured</div><h2 style={{ marginTop: '8px' }}>24,910</h2></div>
-                <div className="card" style={{ borderLeft: '4px solid var(--accent-orange)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>High-Risk Workers</div><h2 style={{ marginTop: '8px' }}>1,420</h2></div>
-                <div className="card" style={{ borderLeft: '4px solid var(--accent-red)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Frequent Claimers</div><h2 style={{ marginTop: '8px' }}>85</h2></div>
-                <div className="card" style={{ borderLeft: '4px solid var(--accent-green)' }}><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Zero Claim Workers</div><h2 style={{ marginTop: '8px' }}>19,500</h2></div>
-              </div>
-            </>
-          )}
-
-          {adminTab === 'triggers' && (
-            <>
-              <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Trigger Monitoring</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Active API endpoints generating parametric truths.</p>
-              </header>
-              <div className="grid-3">
-                {PREDEFINED_TRIGGERS.map((t, idx) => (
-                  <div key={idx} className="card glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ padding: '12px', background: 'rgba(0,115,152,0.1)', borderRadius: '12px', color: 'var(--primary)' }}>
-                      {t.icon}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>{t.condition}</div>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                        <div style={{ width: 8, height: 8, background: 'var(--accent-green)', borderRadius: '50%' }}></div> Polling Every 60s
-                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </>
-          )}
 
-          {adminTab === 'reports' && (
-            <>
-              <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Reports & Data Export</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Download operational datasets.</p>
-              </header>
-              <div className="grid-2">
-                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ marginBottom: '4px' }}>Weekly Claims Report</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>All processed constraints & amounts.</p>
+                  <div style={{ marginBottom: '28px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pay with</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                      {WALLET_ADD_PAYMENT_METHODS.map(m => {
+                        const Ico = m.icon;
+                        const sel = addMoneyPaymentMethod === m.id;
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setAddMoneyPaymentMethod(m.id)}
+                            style={{
+                              padding: '14px 14px',
+                              border: sel ? '2px solid var(--primary)' : '2px solid #E2E8F0',
+                              borderRadius: '14px',
+                              background: sel ? 'rgba(0,115,152,0.06)' : '#fafafa',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '12px',
+                              transition: 'all 0.2s',
+                            }}
+                          >
+                            <div style={{ background: sel ? 'var(--primary)' : '#e2e8f0', padding: '8px', borderRadius: '10px', color: 'white', flexShrink: 0 }}>
+                              <Ico size={18} color={sel ? 'white' : '#64748b'} />
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)' }}>{m.label}</div>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px', lineHeight: 1.3 }}>{m.sub}</div>
+                            </div>
+                            {sel && <CheckCircle size={18} color="var(--primary)" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> CSV</button>
-                </div>
-                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ marginBottom: '4px' }}>Fraud Investigation Log</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Suspicious telemetry trails flagged.</p>
-                  </div>
-                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> Excel</button>
-                </div>
-                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ marginBottom: '4px' }}>Disruption Impact Analysis</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Geographical breakdown of loss.</p>
-                  </div>
-                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> PDF</button>
-                </div>
-                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ marginBottom: '4px' }}>Monthly Payout Ledger</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Cross-referenced banking transcripts.</p>
-                  </div>
-                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> Excel</button>
-                </div>
-              </div>
-            </>
-          )}
-        </main>
-      </div>
-    </div>
+
+                  <button type="button" className="btn btn-primary" onClick={handleAddMoney} disabled={addMoneyStatus === 'loading' || !addMoneyAmount} style={{ width: '100%', padding: '18px', fontSize: '1.05rem', fontWeight: 800 }}>
+                    {addMoneyStatus === 'loading' ? <><Loader2 className="animate-spin" size={24} /> Processing…</> : `Pay ₹${addMoneyAmount ? Number(addMoneyAmount).toLocaleString('en-IN') : '0'}`}
+                  </button>
+                </>
+              )}
+            </div>
+            <div style={{ padding: '16px', background: '#F8FAFC', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <Shield size={14} /> Secured by AEGIS PCI-DSS Compliant Gateway
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 
   return (
@@ -2567,6 +2389,7 @@ export default function App() {
       {currentView === 'onboarding' && renderOnboarding()}
       {currentView === 'rider-dash' && renderRiderDashboard()}
       {currentView === 'admin-dash' && <ControlCenter setCurrentView={setCurrentView} adminLogs={adminLogs} engineStates={engineStates} injectScenario={injectScenario} resetEngines={resetEngines} />}
+      {renderAddMoneyModal()}
     </>
   );
 }

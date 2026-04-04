@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 import datetime
 import uvicorn
 import logging
@@ -19,8 +20,8 @@ app = FastAPI(title="AEGIS: Zero-Trust Parametric Startup MVP")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -31,7 +32,7 @@ app.add_middleware(
 def register_worker(worker: schemas.WorkerCreate, db: Session = Depends(get_db)):
     db_worker = db.query(models.Worker).filter(models.Worker.phone == worker.phone).first()
     if db_worker:
-        raise HTTPException(status_code=400, detail="Phone already registered")
+        return db_worker
     
     new_worker = models.Worker(**worker.dict(), r_score=100.0, wallet_balance=0.0)
     db.add(new_worker)
@@ -45,6 +46,51 @@ def get_worker(worker_id: int, db: Session = Depends(get_db)):
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
     return worker
+
+
+def _wallet_topup_description(payment_method: str) -> str:
+    m = (payment_method or "UPI").strip().upper()
+    labels = {
+        "UPI": "Wallet top-up (UPI)",
+        "NETBANKING": "Wallet top-up (NetBanking)",
+        "CARD": "Wallet top-up (Debit / Credit Card)",
+        "OTHER": "Wallet top-up",
+    }
+    return labels.get(m, labels["OTHER"])
+
+
+@app.post("/worker/{worker_id}/wallet/top-up")
+def wallet_top_up(worker_id: int, body: schemas.WalletTopUpRequest, db: Session = Depends(get_db)):
+    if body.amount <= 0 or body.amount > 1_000_000:
+        raise HTTPException(status_code=400, detail="Invalid amount")
+    method = (body.payment_method or "UPI").strip().upper()
+    if method not in ("UPI", "NETBANKING", "CARD", "OTHER"):
+        raise HTTPException(status_code=400, detail="Invalid payment_method")
+    worker = db.query(models.Worker).filter(models.Worker.id == worker_id).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    worker.wallet_balance = (worker.wallet_balance or 0.0) + float(body.amount)
+    entry = models.WalletLedger(
+        worker_id=worker_id,
+        amount=float(body.amount),
+        description=_wallet_topup_description(method),
+        txn_type="CREDIT",
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(worker)
+    db.refresh(entry)
+    return {
+        "wallet_balance": worker.wallet_balance,
+        "transaction": {
+            "id": entry.id,
+            "amount": entry.amount,
+            "description": entry.description,
+            "txn_type": entry.txn_type,
+            "created_at": entry.created_at.isoformat() if entry.created_at else None,
+        },
+    }
+
 
 # ==================== PREMIUM ENDPOINTS ====================
 
@@ -78,7 +124,7 @@ def create_policy(policy: schemas.PolicyCreate, db: Session = Depends(get_db)):
     ).first()
     
     if active_policy:
-        raise HTTPException(status_code=400, detail="Worker already has an active policy")
+        return active_policy
 
     calc = PremiumEngine.calculate_weekly_premium(worker, 5000.0 if policy.tier == "Pro" else (8000.0 if policy.tier == "Elite" else 3000.0))
     premium_paid = calc["premium_amount"]
@@ -87,6 +133,14 @@ def create_policy(policy: schemas.PolicyCreate, db: Session = Depends(get_db)):
 
     if wallet_credit > 0:
         worker.wallet_balance -= wallet_credit
+        db.add(
+            models.WalletLedger(
+                worker_id=worker.id,
+                amount=wallet_credit,
+                description=f"Weekly plan payment — wallet applied ({policy.tier})",
+                txn_type="DEBIT",
+            )
+        )
 
     week_start = datetime.datetime.utcnow()
     week_end = week_start + datetime.timedelta(days=7)
@@ -175,12 +229,30 @@ def get_dashboard(worker_id: int, db: Session = Depends(get_db)):
     
     active_policy = next((p for p in policies if p.status == "ACTIVE"), None)
     past_policies = [p for p in policies if p.status != "ACTIVE"]
-    
+
+    ledger_rows = (
+        db.query(models.WalletLedger)
+        .filter(models.WalletLedger.worker_id == worker_id)
+        .order_by(desc(models.WalletLedger.created_at))
+        .limit(100)
+        .all()
+    )
+
     return {
         "worker": worker,
         "active_policy": active_policy,
         "past_policies": past_policies,
         "claims": claims,
+        "wallet_ledger": [
+            {
+                "id": row.id,
+                "amount": row.amount,
+                "description": row.description,
+                "txn_type": row.txn_type,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in ledger_rows
+        ],
         "system_status": {
             "circuit_breaker_active": config.CIRCUIT_BREAKER_ACTIVE,
             "demo_mode_active": DemoModeController.get_active_scenario() is not None
@@ -197,6 +269,10 @@ async def force_majeure_circuit_breaker(request: Request):
         config.CIRCUIT_BREAKER_ACTIVE = True
         logger.critical(f"CIRCUIT BREAKER ENGAGED! Event: {payload.get('event_type')}")
         return {"status": "SUCCESS", "message": "Circuit breaker is active. All platform claims are halted."}
+    elif payload.get("directive") == "UNFREEZE_ALL_PARAMETRIC_PAYOUTS":
+        config.CIRCUIT_BREAKER_ACTIVE = False
+        logger.warning(f"CIRCUIT BREAKER LIFTED! Event: {payload.get('event_type')}")
+        return {"status": "SUCCESS", "message": "Circuit breaker lifted. Normal operations have resumed."}
     return {"status": "IGNORED"}
 
 # ==================== DEMO MODE ENDPOINTS (FOR LIVE DEMONSTRATIONS) ====================
