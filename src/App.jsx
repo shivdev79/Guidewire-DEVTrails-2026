@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { motion } from 'framer-motion';
 import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase } from 'lucide-react';
 import ControlCenter from './ControlCenter';
 
@@ -10,6 +11,151 @@ const MOCK_ZONES = [
   { id: 'z2', name: 'North Suburbs', risk: 'Low', aqi: 85, weather: 'Clear' },
   { id: 'z3', name: 'East Industrial', risk: 'Critical', aqi: 310, weather: 'Smog' }
 ];
+
+// AI-Powered Dynamic Policy Catalog
+const POLICY_CATALOG = [
+  {
+    id: 'shield-micro',
+    name: 'Aegis Micro Shield',
+    tagline: 'Entry-level parametric cover for low-risk zones',
+    basePrice: 22,
+    coverage: 800,
+    tier: 'Base',
+    color: '#64748b',
+    accentColor: 'rgba(100,116,139,0.1)',
+    badge: null,
+    coverageHours: 8,
+    triggers: ['Heavy Rain (>15mm/hr)', 'Extreme Heat (>43°C)'],
+    perks: ['Claim processed in 48h', 'Resilience Wallet (15% of premium)', 'Basic UPI Payout'],
+    pricingFactors: {
+      expectedLossBase: 0.008, lambda: 0.08, gamma: 3, rScoreBeta: 0.3, pFloorPct: 0.004
+    }
+  },
+  {
+    id: 'shield-base',
+    name: 'Aegis Shield Base',
+    tagline: 'Standard weekly floor for regular gig workers',
+    basePrice: 30,
+    coverage: 1500,
+    tier: 'Base',
+    color: '#3b82f6',
+    accentColor: 'rgba(59,130,246,0.1)',
+    badge: null,
+    coverageHours: 10,
+    triggers: ['Heavy Rain (>20mm/hr)', 'Extreme Heat (>42°C)', 'Poor AQI (>280)'],
+    perks: ['Claim processed in 24h', 'Resilience Wallet (18% of premium)', 'Safe Zone Yield Bonus'],
+    pricingFactors: {
+      expectedLossBase: 0.01, lambda: 0.1, gamma: 5, rScoreBeta: 0.4, pFloorPct: 0.005
+    }
+  },
+  {
+    id: 'shield-pro',
+    name: 'Aegis Shield Pro',
+    tagline: 'Expanded triggers including civic disruptions',
+    basePrice: 48,
+    coverage: 3000,
+    tier: 'Pro',
+    color: '#00678a',
+    accentColor: 'rgba(0,103,138,0.1)',
+    badge: 'Most Popular',
+    coverageHours: 12,
+    triggers: ['Heavy Rain (>15mm/hr)', 'AQI (>250)', 'Civic Strikes', 'Platform Outage'],
+    perks: ['Claim in under 4h', 'Resilience Wallet (20% of premium)', 'Risk Rebate mid-week', 'Safe Zone Nudge Alerts'],
+    pricingFactors: {
+      expectedLossBase: 0.012, lambda: 0.1, gamma: 6, rScoreBeta: 0.5, pFloorPct: 0.0055
+    }
+  },
+  {
+    id: 'shield-elite',
+    name: 'Aegis Elite Resilience',
+    tagline: 'Full multi-trigger protection for high-risk zones',
+    basePrice: 72,
+    coverage: 5000,
+    tier: 'Elite',
+    color: '#7c3aed',
+    accentColor: 'rgba(124,58,237,0.1)',
+    badge: 'High Value',
+    coverageHours: 14,
+    triggers: ['All Weather Events', 'AQI (>200)', 'All Civic Disruptions', 'Platform Crashes', 'Barometric Altitude Shift'],
+    perks: ['Instant Claim (<2h)', 'Resilience Wallet (22% of premium)', 'Predictive Risk Rebate', 'Dynamic Coverage Hour Extension'],
+    pricingFactors: {
+      expectedLossBase: 0.014, lambda: 0.12, gamma: 8, rScoreBeta: 0.65, pFloorPct: 0.006
+    }
+  },
+  {
+    id: 'shield-storm',
+    name: 'Aegis Storm Commander',
+    tagline: 'Maximum protection for monsoon-prone zones',
+    basePrice: 95,
+    coverage: 8000,
+    tier: 'Elite',
+    color: '#0891b2',
+    accentColor: 'rgba(8,145,178,0.1)',
+    badge: 'Premium',
+    coverageHours: 16,
+    triggers: ['All Triggers + Flood Zone Guarantee', 'Syndicate Fraud Zero-Trust', 'UPI Emergency Top-Up'],
+    perks: ['Sub-90 sec UPI Payout', 'Resilience Wallet (25% of premium)', 'Full Risk Rebate', 'Dedicated SOS Line', 'Extended Coverage Hours (weather-adaptive)'],
+    pricingFactors: {
+      expectedLossBase: 0.016, lambda: 0.14, gamma: 10, rScoreBeta: 0.75, pFloorPct: 0.007
+    }
+  },
+  {
+    id: 'shield-guardian',
+    name: 'Aegis Gig Guardian',
+    tagline: 'AI-personalized adaptive plan for veteran riders',
+    basePrice: 55,
+    coverage: 4000,
+    tier: 'Pro',
+    color: '#059669',
+    accentColor: 'rgba(5,150,105,0.1)',
+    badge: 'AI Personalised',
+    coverageHours: 13,
+    triggers: ['Adaptive AI Triggers (zone-specific)', 'Flood + AQI + Strike combo coverage'],
+    perks: ['Real-time adaptive premium', 'Resilience Wallet (20%)', 'Weekly AI Risk Report', 'Free Coverage Week after 4-week streak'],
+    pricingFactors: {
+      expectedLossBase: 0.013, lambda: 0.11, gamma: 7, rScoreBeta: 0.6, pFloorPct: 0.0058
+    }
+  }
+];
+
+// Zone-based historical flood & weather risk data (mock of Guidewire HazardHub + historical DB)
+const ZONE_RISK_PROFILES = {
+  z1: { name: 'Downtown Core', floodIncidents3yr: 18, waterloggingRisk: 'High', riskMultiplier: 1.4, weatherMultiplierThisWeek: 1.2, insight: 'High waterlogging zone. 18 flood events in 3 years. Premium adjusted upward.' },
+  z2: { name: 'North Suburbs', floodIncidents3yr: 0, waterloggingRisk: 'Low', riskMultiplier: 0.85, weatherMultiplierThisWeek: 0.9, insight: 'Your zone has 0 flood incidents in 3 years → you save ₹2–5/week. Clear skies predicted → coverage hours extended.' },
+  z3: { name: 'East Industrial', floodIncidents3yr: 24, waterloggingRisk: 'Critical', riskMultiplier: 1.6, weatherMultiplierThisWeek: 1.4, insight: 'Critical flood-risk industrial zone. Frequent waterlogging. Premium significantly higher this week due to heavy rain forecast.' }
+};
+
+// Dynamic Pricing Engine (mirrors backend formula)
+const computeDynamicPremium = (policy, zoneId, rScore, walletBalance, weeklyRainMm = 10) => {
+  const profile = ZONE_RISK_PROFILES[zoneId] || ZONE_RISK_PROFILES.z1;
+  const { expectedLossBase, lambda, gamma, rScoreBeta, pFloorPct } = policy.pricingFactors;
+  const baseExpectedLoss = policy.coverage * expectedLossBase;
+  const weatherMult = weeklyRainMm > 20 ? 1.35 : weeklyRainMm > 10 ? 1.1 : 0.92;
+  const zoneMult = profile.riskMultiplier;
+  const expectedLoss = baseExpectedLoss * zoneMult * weatherMult;
+  const wCredit = Math.min(walletBalance, policy.coverage * 0.01);
+  const rDiscount = rScore * rScoreBeta;
+  const rawPremium = (expectedLoss * (1 + lambda)) + gamma - rDiscount - wCredit;
+  const pFloor = policy.coverage * pFloorPct;
+  const finalPremium = Math.max(rawPremium, pFloor);
+  const basePremium = (baseExpectedLoss * (1 + lambda)) + gamma; // no zone or behavioural adjustments
+  const savings = Math.max(0, basePremium - finalPremium);
+  // Extended coverage hours if weather safe this week
+  const bonusHours = weatherMult < 1 ? 2 : 0;
+  return {
+    finalPremium: Math.round(finalPremium * 100) / 100,
+    breakdown: {
+      expectedLoss: Math.round(expectedLoss * 100) / 100,
+      zoneMultiplier: zoneMult,
+      weatherMultiplier: weatherMult,
+      rScoreDiscount: Math.round(rDiscount * 100) / 100,
+      walletCredit: Math.round(wCredit * 100) / 100,
+    },
+    savings: Math.round(savings * 100) / 100,
+    bonusCoverageHours: policy.coverageHours + bonusHours,
+    zoneInsight: profile.insight,
+  };
+};
 
 const PREDEFINED_TRIGGERS = [
   { type: 'weather', condition: 'Heavy Rain (>50mm/hr)', icon: <CloudRainWind size={18} /> },
@@ -39,9 +185,12 @@ export default function App() {
   const [showNudge, setShowNudge] = useState(false);
   
   const [claims, setClaims] = useState([]);
-  const [riderTab, setRiderTab] = useState('overview'); // overview, claims
-  const [adminTab, setAdminTab] = useState('overview'); // overview, risk, disruptions, claims, fraud, policies, payouts, analytics, loss-ratio, workers, triggers, reports
+  const [riderTab, setRiderTab] = useState('overview');
+  const [adminTab, setAdminTab] = useState('overview');
   const [manualClaim, setManualClaim] = useState({ reason: 'Rain', description: '', amount: '' });
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [activatedPlan, setActivatedPlan] = useState(null);
+  const [showPricingBreakdown, setShowPricingBreakdown] = useState(null); // policy.id or null
 
   const [adminData, setAdminData] = useState({ workers: [], policies: [], claims: [], metrics: {} });
   
@@ -350,54 +499,85 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right Column (Login / Intake Form) */}
-          <div style={{ flex: 0.8 }}>
-            <div className="card" style={{ background: '#ffffff', color: '#333333', padding: '40px', borderRadius: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', border: 'none' }}>
-              
-              <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-                <div style={{ display: 'inline-flex', padding: '16px', background: 'rgba(0, 103, 138, 0.1)', borderRadius: '50%', marginBottom: '16px' }}>
-                  <Shield size={40} color="#00678a" />
-                </div>
-                <h3 style={{ margin: 0, color: '#00678a', fontSize: '1.6rem', fontWeight: 800 }}>AEGIS PORTAL</h3>
-                <p style={{ color: '#666666', fontFamily: '"Poppins", sans-serif', fontSize: '0.95rem', marginTop: '8px' }}>Select your access level</p>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <button
-                  className="btn"
-                  style={{ width: '100%', padding: '18px', fontSize: '1.05rem', background: '#FFC72C', color: '#00678a', borderRadius: '8px', fontWeight: 800, border: 'none', boxShadow: '0 4px 14px rgba(255, 199, 44, 0.4)' }}
-                  onClick={() => setCurrentView('onboarding')}
-                >
-                  Login as Rider / Register
-                </button>
+          {/* Right Column (Mobile Login Mockup) */}
+          <div style={{ flex: 0.8, display: 'flex', justifyContent: 'center' }}>
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.8 }} style={{ width: '340px', height: '620px', background: '#1c1c1c', borderRadius: '48px', padding: '12px', boxShadow: '0 40px 80px rgba(0,0,0,0.5), inset 0 0 12px rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.15)', position: 'relative' }}>
+              {/* Inner Screen */}
+              <div style={{ width: '100%', height: '100%', background: '#fff', borderRadius: '36px', overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
                 
-                <div style={{ position: 'relative', margin: '16px 0', display: 'flex', alignItems: 'center' }}>
-                  <div style={{ flex: 1, borderTop: '1px solid #e0e0e0' }}></div>
-                  <span style={{ padding: '0 12px', color: '#999999', fontSize: '0.85rem', fontWeight: 700 }}>OR</span>
-                  <div style={{ flex: 1, borderTop: '1px solid #e0e0e0' }}></div>
+                {/* Status Bar / Dynamic Island */}
+                <div style={{ position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)', width: '90px', height: '26px', background: '#000', borderRadius: '20px', zIndex: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#18181b', border: '1px solid #333' }}></div>
                 </div>
 
-                <button
-                  className="btn"
-                  style={{ width: '100%', padding: '18px', fontSize: '1.05rem', background: '#ffffff', color: '#00678a', border: '2px solid #00678a', borderRadius: '8px', fontWeight: 700 }}
-                  onClick={() => setCurrentView('admin-dash')}
-                >
-                  Login as Insurer
-                </button>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#ffffff', position: 'relative' }}>
+                  {/* Top Insurance Graphic */}
+                  <div style={{ background: 'linear-gradient(135deg, #00678a, #004b66)', height: '250px', padding: '60px 24px 20px', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderBottomLeftRadius: '32px', borderBottomRightRadius: '32px', boxShadow: '0 10px 20px rgba(0,103,138,0.15)', position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: '-10px', right: '-20px', opacity: 0.1 }}>
+                      <Shield size={180} />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', zIndex: 1 }}>
+                      <Shield size={32} color="#FFC72C" />
+                      <div style={{ fontSize: '1.2rem', fontWeight: 800, letterSpacing: '1px' }}>AEGIS PORTAL</div>
+                    </div>
+                    <div style={{ zIndex: 1 }}>
+                      <div style={{ fontSize: '1.6rem', fontWeight: 800, lineHeight: 1.2, fontFamily: '"Montserrat", sans-serif' }}>Your Income.<br/>Protected.</div>
+                      <div style={{ fontSize: '0.85rem', color: '#e0f2fe', marginTop: '8px', fontFamily: '"Poppins", sans-serif' }}>Select terminal access level</div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div style={{ padding: '32px 24px', display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
+                    <motion.button
+                      whileHover={{ scale: 1.02, boxShadow: '0 10px 25px rgba(255, 199, 44, 0.4)' }}
+                      whileTap={{ scale: 0.98 }}
+                      style={{ width: '100%', padding: '16px', fontSize: '1.05rem', background: '#FFC72C', color: '#00678a', borderRadius: '16px', fontWeight: 800, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                      onClick={() => setCurrentView('onboarding')}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <User size={20} />
+                        <span>Partner • Rider</span>
+                      </div>
+                      <ArrowRightLeft size={18} />
+                    </motion.button>
+
+                    <div style={{ position: 'relative', margin: '6px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ flex: 1, borderTop: '1px solid #eee' }}></div>
+                      <span style={{ padding: '0 12px', color: '#aaa', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '1px' }}>OR</span>
+                      <div style={{ flex: 1, borderTop: '1px solid #eee' }}></div>
+                    </div>
+
+                    <motion.button
+                      whileHover={{ scale: 1.02, boxShadow: '0 10px 25px rgba(0, 103, 138, 0.15)' }}
+                      whileTap={{ scale: 0.98 }}
+                      style={{ width: '100%', padding: '16px', fontSize: '1.05rem', background: '#f8fbfc', color: '#00678a', border: '2px solid rgba(0,103,138,0.2)', borderRadius: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                      onClick={() => setCurrentView('admin-dash')}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <Briefcase size={20} />
+                        <span>Insurer Login</span>
+                      </div>
+                      <ShieldCheck size={18} />
+                    </motion.button>
+                  </div>
+
+                  {/* Trust Badges */}
+                  <div style={{ padding: '24px', background: '#f9fafb', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ background: '#ecfdf5', padding: '6px', borderRadius: '8px' }}><CheckCircle size={16} color="#10b981" /></div>
+                      <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, fontFamily: '"Poppins", sans-serif' }}>Play Integrity Secured</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ background: '#eff6ff', padding: '8px', borderRadius: '8px' }}><Activity size={16} color="#3b82f6" /></div>
+                      <span style={{ fontSize: '0.8rem', color: '#555', fontWeight: 600, fontFamily: '"Poppins", sans-serif' }}>Guidewire ClaimCenter Synced</span>
+                    </div>
+                  </div>
+
+                  {/* Home Indicator */}
+                  <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', width: '35%', height: '4px', background: '#ddd', borderRadius: '2px' }}></div>
+                </div>
               </div>
-
-              <div style={{ marginTop: '24px', padding: '16px', background: '#f5f7fa', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                  <CheckCircle size={18} color="#00678a" />
-                  <span style={{ fontSize: '0.9rem', color: '#555555', fontFamily: '"Poppins", sans-serif', fontWeight: 500 }}>Play Integrity Secured</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <CheckCircle size={18} color="#00678a" />
-                  <span style={{ fontSize: '0.9rem', color: '#555555', fontFamily: '"Poppins", sans-serif', fontWeight: 500 }}>Guidewire ClaimCenter Synced</span>
-                </div>
-              </div>
-
-            </div>
+            </motion.div>
           </div>
 
         </div>
@@ -406,6 +586,195 @@ export default function App() {
       {/* Layout Content */}
       <div style={{ background: '#ffffff', borderRadius: '40px 40px 0 0', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#333333' }}>
         
+        {/* Experience on the Go Section */}
+        <div style={{ width: '100%', maxWidth: '1250px', margin: '40px auto 140px auto', position: 'relative' }}>
+          {/* Modern Glow Background */}
+          <div style={{ position: 'absolute', top: '-10%', left: '-5%', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(0,103,138,0.06) 0%, transparent 70%)', filter: 'blur(50px)', zIndex: 0 }}></div>
+          <div style={{ position: 'absolute', bottom: '-10%', right: '-5%', width: '500px', height: '500px', background: 'radial-gradient(circle, rgba(0,103,138,0.08) 0%, transparent 70%)', filter: 'blur(50px)', zIndex: 0 }}></div>
+          
+          <div style={{ background: 'linear-gradient(145deg, rgba(255,255,255,1) 0%, rgba(244,250,253,0.9) 100%)', borderRadius: '48px', display: 'flex', overflow: 'hidden', boxShadow: '0 30px 80px rgba(0, 103, 138, 0.1)', position: 'relative', zIndex: 1, border: '1px solid rgba(255,255,255,0.8)', backdropFilter: 'blur(20px)' }}>
+            
+            {/* Left Side */}
+            <div style={{ flex: 1.1, padding: '80px 60px', color: '#00678a', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} viewport={{ once: true }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(0,103,138,0.08)', padding: '8px 16px', borderRadius: '20px', marginBottom: '24px', border: '1px solid rgba(0,103,138,0.1)' }}>
+                   <Zap size={16} color="#00678a" />
+                   <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '1px', color: '#00678a' }}>SEAMLESS PROTECTION</span>
+                </div>
+              </motion.div>
+              
+              <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }} viewport={{ once: true }} style={{ fontSize: '3.4rem', fontWeight: 800, lineHeight: 1.15, marginBottom: '24px', background: 'linear-gradient(to right, #00678a, #004b66)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', textShadow: '0 4px 20px rgba(0,103,138,0.08)' }}>
+                Zero-touch parametric engine on your phone.
+              </motion.h2>
+              
+              <motion.p initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }} viewport={{ once: true }} style={{ fontSize: '1.15rem', color: '#555', fontFamily: '"Poppins", sans-serif', lineHeight: 1.7, marginBottom: '40px' }}>
+                Aegis turns your device into an intelligent risk shield. Activate policies, monitor live micro-climate disruptions, and receive instant automated payouts—all without filing paperwork.
+              </motion.p>
+
+              {/* Interactive Benefit Cards */}
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.3 }} viewport={{ once: true }} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '48px' }}>
+                 <motion.div whileHover={{ y: -5, boxShadow: '0 15px 30px rgba(0,103,138,0.1)' }} style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,103,138,0.06)', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', transition: 'all 0.3s ease' }}>
+                    <div style={{ background: 'rgba(0,103,138,0.06)', padding: '12px', borderRadius: '16px' }}><Activity size={24} color="#00678a" /></div>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#333' }}>Risk prediction via<br/>hybrid AI</span>
+                 </motion.div>
+                 <motion.div whileHover={{ y: -5, boxShadow: '0 15px 30px rgba(0,103,138,0.1)' }} style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,103,138,0.06)', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', transition: 'all 0.3s ease' }}>
+                    <div style={{ background: 'rgba(0,103,138,0.06)', padding: '12px', borderRadius: '16px' }}><ShieldCheck size={24} color="#00678a" /></div>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#333' }}>Automated trigger<br/>validation</span>
+                 </motion.div>
+                 <motion.div whileHover={{ y: -5, boxShadow: '0 15px 30px rgba(0,103,138,0.1)' }} style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,103,138,0.06)', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', transition: 'all 0.3s ease' }}>
+                    <div style={{ background: 'rgba(0,103,138,0.06)', padding: '12px', borderRadius: '16px' }}><Map size={24} color="#00678a" /></div>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#333' }}>Real-time trajectory<br/>tracking</span>
+                 </motion.div>
+                 <motion.div whileHover={{ y: -5, boxShadow: '0 15px 30px rgba(0,103,138,0.1)' }} style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,103,138,0.06)', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', transition: 'all 0.3s ease' }}>
+                    <div style={{ background: 'rgba(255,199,44,0.15)', padding: '12px', borderRadius: '16px' }}><Wallet size={24} color="#00678a" /></div>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#333' }}>Automated Resilience<br/>Wallet</span>
+                 </motion.div>
+              </motion.div>
+
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.4 }} viewport={{ once: true }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '16px', color: '#00678a', letterSpacing: '0.5px' }}>GET SECURED NOW</h4>
+                <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                  {/* Quick Download QR Wrapper */}
+                  <div style={{ background: 'white', padding: '12px', borderRadius: '16px', display: 'flex', gap: '20px', alignItems: 'center', border: '1px solid rgba(0,103,138,0.1)', boxShadow: '0 4px 20px rgba(0,103,138,0.05)' }}>
+                    <div style={{ width: '70px', height: '70px', background: '#f8f9fa', padding: '6px', borderRadius: '10px', display: 'flex', flexWrap: 'wrap', gap: '2px', border: '1px solid #eee' }}>
+                       {Array.from({ length: 25 }).map((_, i) => (
+                         <div key={i} style={{ width: '10px', height: '10px', background: (i % 2 === 0 || i % 5 === 0) ? '#00678a' : 'transparent', borderRadius: '2px' }}></div>
+                       ))}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '10px' }}>
+                       <motion.img whileHover={{ scale: 1.05 }} src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Google Play" style={{ height: '36px', cursor: 'pointer' }} />
+                       <motion.img whileHover={{ scale: 1.05 }} src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="App Store" style={{ height: '36px', cursor: 'pointer' }} />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Right Side - Creative 3D Phone Mockup */}
+            <div style={{ flex: 0.9, position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'radial-gradient(circle at center, rgba(0,103,138,0.06) 0%, transparent 70%)', minHeight: '700px' }}>
+              
+              {/* Abstract Circular Behind Phone */}
+              <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 40, ease: "linear" }} style={{ position: 'absolute', width: '480px', height: '480px', border: '2px dashed rgba(0,103,138,0.15)', borderRadius: '50%', background: 'conic-gradient(from 0deg, transparent 0%, rgba(0,103,138,0.05) 25%, transparent 50%)', zIndex: 0 }}></motion.div>
+              <div style={{ position: 'absolute', width: '380px', height: '380px', border: '1px solid rgba(0,103,138,0.1)', borderRadius: '50%', zIndex: 0 }}></div>
+
+              {/* Floating Card 1: Payout */}
+              <motion.div initial={{ opacity: 0, x: 50, y: -20 }} whileInView={{ opacity: 1, x: 0, y: 0 }} transition={{ duration: 0.8, delay: 0.6 }} viewport={{ once: true }} 
+                 whileHover={{ scale: 1.05 }}
+                 style={{ position: 'absolute', top: '22%', right: '-15px', background: 'white', padding: '16px 20px', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,103,138,0.15)', zIndex: 3, display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid rgba(0,103,138,0.05)', cursor: 'pointer' }}>
+                <div style={{ background: '#ecfdf5', padding: '10px', borderRadius: '12px' }}><CheckCircle size={24} color="#10b981" /></div>
+                <div>
+                   <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: 600 }}>Payout Initiated</div>
+                   <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#333' }}>+ ₹1,500 <span style={{fontSize: '0.8rem', fontWeight: 500}}>UPI</span></div>
+                </div>
+              </motion.div>
+
+              {/* Floating Card 2: Risk Alert */}
+              <motion.div initial={{ opacity: 0, x: -50, y: 20 }} whileInView={{ opacity: 1, x: 0, y: 0 }} transition={{ duration: 0.8, delay: 0.8 }} viewport={{ once: true }} 
+                 whileHover={{ scale: 1.05 }}
+                 style={{ position: 'absolute', bottom: '22%', left: '10px', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(20px)', padding: '16px 20px', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,103,138,0.15)', zIndex: 3, display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid rgba(0,103,138,0.05)', cursor: 'pointer' }}>
+                <div style={{ background: '#fef2f2', padding: '10px', borderRadius: '12px' }}><AlertTriangle size={24} color="#ef4444" /></div>
+                <div>
+                   <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: 600 }}>Risk Detected</div>
+                   <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#333' }}>Heavy Rain Sector 4</div>
+                </div>
+              </motion.div>
+
+              {/* Phone Frame wrapper with float animation */}
+              <motion.div animate={{ y: [0, -15, 0] }} transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }} style={{ position: 'relative', zIndex: 1, transform: 'rotate(5deg)' }}>
+                <div style={{ width: '310px', height: '630px', background: '#111', borderRadius: '48px', padding: '10px', boxShadow: '0 30px 60px rgba(0,0,0,0.25), inset 0 0 10px rgba(255,255,255,0.4)', border: '2px solid rgba(255,255,255,0.2)' }}>
+                  {/* Inner Screen */}
+                  <div style={{ width: '100%', height: '100%', background: '#fff', borderRadius: '38px', overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                     {/* Dynamic Island */}
+                     <div style={{ position: 'absolute', top: '8px', left: '50%', transform: 'translateX(-50%)', width: '100px', height: '28px', background: '#000', borderRadius: '20px', zIndex: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                       <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#111', border: '1px solid #333' }}></div>
+                     </div>
+
+                     {/* App Topbar */}
+                     <div style={{ background: '#fdfdfd', padding: '50px 20px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                         <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #00678a, #003366)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,103,138,0.2)' }}>
+                           <User size={20} color="white" />
+                         </div>
+                         <div>
+                           <div style={{ fontSize: '0.8rem', color: '#666', fontFamily: '"Poppins", sans-serif' }}>Partner Portal</div>
+                           <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#333' }}>Live Status</div>
+                         </div>
+                       </div>
+                       <div style={{ position: 'relative', background: '#f0f4f8', padding: '8px', borderRadius: '50%' }}>
+                         <Bell size={20} color="#00678a" />
+                         <div style={{ position: 'absolute', top: '8px', right: '8px', width: '8px', height: '8px', background: '#ff3b30', borderRadius: '50%', border: '2px solid white' }}></div>
+                       </div>
+                     </div>
+
+                     {/* App Content */}
+                     <div style={{ padding: '20px', background: '#f8f9fa', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        
+                        {/* Active Coverage Glowing Card */}
+                        <div style={{ background: 'linear-gradient(135deg, #00678a 0%, #004b66 100%)', borderRadius: '24px', padding: '24px', color: 'white', boxShadow: '0 12px 30px rgba(0, 103, 138, 0.3)', position: 'relative', overflow: 'hidden' }}>
+                          <motion.div animate={{ scale: [1, 1.1, 1], opacity: [0.1, 0.15, 0.1] }} transition={{ repeat: Infinity, duration: 4 }} style={{ position: 'absolute', right: '-20px', bottom: '-20px' }}>
+                            <ShieldCheck size={140} />
+                          </motion.div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', position: 'relative' }}>
+                             <div style={{ padding: '6px', background: 'rgba(255,255,255,0.15)', borderRadius: '10px' }}>
+                               <ShieldCheck size={20} color="#FFC72C" />
+                             </div>
+                             <span style={{ fontWeight: 600, fontSize: '0.9rem', letterSpacing: '0.5px' }}>ACTIVE COVERAGE</span>
+                          </div>
+                          <div style={{ fontSize: '0.8rem', opacity: 0.9, marginBottom: '2px', position: 'relative' }}>Current Weekly Floor</div>
+                          <div style={{ fontSize: '2.2rem', fontWeight: 800, marginBottom: '20px', letterSpacing: '-0.5px', position: 'relative' }}>₹8,000</div>
+                          <button style={{ background: '#FFC72C', color: '#00678a', border: 'none', padding: '12px 16px', borderRadius: '14px', fontSize: '0.9rem', fontWeight: 800, width: '100%', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', position: 'relative' }}>Renew Policy</button>
+                        </div>
+
+                        <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#333', marginTop: '4px' }}>Essentials</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                           <div style={{ background: 'white', padding: '14px 8px', borderRadius: '18px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ background: '#eff6ff', padding: '12px', borderRadius: '14px' }}><Upload size={20} color="#3b82f6" /></div>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#444' }}>Claim</div>
+                           </div>
+                           <div style={{ background: 'white', padding: '14px 8px', borderRadius: '18px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ background: '#fffbeb', padding: '12px', borderRadius: '14px' }}><Wallet size={20} color="#d97706" /></div>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#444' }}>Wallet</div>
+                           </div>
+                           <div style={{ background: 'white', padding: '14px 8px', borderRadius: '18px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '14px' }}><Map size={20} color="#10b981" /></div>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#444' }}>Zones</div>
+                           </div>
+                        </div>
+
+                        <div style={{ background: 'white', padding: '16px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '14px', marginTop: '4px' }}>
+                           <div style={{ background: '#fef2f2', padding: '12px', borderRadius: '14px' }}>
+                             <CloudRainWind size={22} color="#ef4444" />
+                           </div>
+                           <div>
+                              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#333' }}>Heavy Rain Forecast</div>
+                              <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '2px', fontWeight: 500 }}>Severe • Next 2 hours</div>
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* App Bottom Navbar */}
+                     <div style={{ background: 'white', padding: '16px 20px 24px 20px', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f0f0f0' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#00678a' }}>
+                          <Activity size={22} /><span style={{ fontSize: '0.65rem', fontWeight: 800 }}>Home</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#ccc' }}>
+                          <ShieldCheck size={22} /><span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Policies</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#ccc' }}>
+                          <Wallet size={22} /><span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Wallet</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#ccc' }}>
+                          <User size={22} /><span style={{ fontSize: '0.65rem', fontWeight: 600 }}>Profile</span>
+                        </div>
+                     </div>
+                     {/* Home Indicator */}
+                     <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', width: '35%', height: '4px', background: '#ccc', borderRadius: '2px' }}></div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </div>
         {/* Why Choose AEGIS Section */}
         <div style={{ maxWidth: '1000px', width: '100%', marginBottom: '100px', textAlign: 'center' }}>
           <div style={{ color: '#FFC72C', fontWeight: 800, letterSpacing: '1px', marginBottom: '16px' }}>WHY CHOOSE AEGIS?</div>
@@ -528,13 +897,13 @@ export default function App() {
               </div>
               <h3 style={{ fontSize: '1.3rem', color: '#00678a', marginBottom: '12px', fontWeight: 800 }}>Instant UPI Settlements</h3>
               <p style={{ color: '#666666', fontFamily: '"Poppins", sans-serif', fontSize: '0.95rem', lineHeight: 1.6 }}>By orchestrating Guidewire ClaimCenter with Razorpay routes, verified claims bypass NEFT delays and hit the worker's bank account in under 90 seconds.</p>
-            </div>
-            
           </div>
         </div>
+
       </div>
     </div>
-  );
+  </div>
+);
 
   const renderOnboarding = () => (
     <div style={{ background: '#f8f9fa', minHeight: '100vh', padding: '40px 20px' }}>
@@ -787,6 +1156,9 @@ export default function App() {
               <div className={`btn ${riderTab === 'my-policy' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'my-policy' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'my-policy' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'my-policy' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('my-policy')}>
                 <ShieldCheck size={18} /> My Policy
               </div>
+              <div className={`btn ${riderTab === 'explore-plans' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'explore-plans' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'explore-plans' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'explore-plans' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('explore-plans')}>
+                <Sliders size={18} /> Explore Plans
+              </div>
               <div className={`btn ${riderTab === 'file-claim' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'file-claim' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'file-claim' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'file-claim' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('file-claim')}>
                 <ListPlus size={18} /> File a Claim
               </div>
@@ -982,6 +1354,277 @@ export default function App() {
               </>
             )}
 
+            {riderTab === 'explore-plans' && (() => {
+              const weeklyRain = currentConditions.weather === 'Heavy Rain (>50mm/hr)' ? 55 : 8;
+              const zoneProfile = ZONE_RISK_PROFILES[riderInfo.zone] || ZONE_RISK_PROFILES.z1;
+              return (
+              <>
+                <header style={{ marginBottom: '24px' }}>
+                  <h1 className="animate-slide-up">Explore Plans</h1>
+                  <p style={{ color: 'var(--text-muted)' }}>Your premium is personalised using zone flood history, live weather + your behavioural R-Score.</p>
+                </header>
+
+                {/* Premium Zone + AI pricing insight banner (Light Blue Theme) */}
+                <div className="card animate-slide-up delay-100" style={{ 
+                  marginBottom: '32px', 
+                  background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', 
+                  color: '#0f172a', 
+                  padding: '28px',
+                  borderRadius: '20px',
+                  boxShadow: '0 12px 30px -10px rgba(0, 115, 152, 0.15)',
+                  border: '1px solid #bae6fd',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  {/* Decorative background glow */}
+                  <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px', background: 'radial-gradient(circle, rgba(2,132,199,0.1) 0%, rgba(255,255,255,0) 70%)', borderRadius: '50%' }}></div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '32px', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
+                    {/* Left Icon Area */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: '1 1 200px' }}>
+                      <div style={{ background: 'rgba(255,255,255,0.7)', padding: '16px', borderRadius: '16px', flexShrink: 0, border: '1px solid #bae6fd', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
+                        <BrainCircuit size={28} color="var(--primary)" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', letterSpacing: '1.5px', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>AI Pricing Engine</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>Live Zone Analysis</div>
+                      </div>
+                    </div>
+
+                    {/* Middle: Zone Selector + Insight */}
+                    <div style={{ flex: '2 1 300px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Map size={18} color="var(--primary)" />
+                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>Operating Zone:</span>
+                        <select
+                          value={riderInfo.zone || 'z1'}
+                          onChange={e => setRiderInfo({ ...riderInfo, zone: e.target.value })}
+                          style={{ 
+                            background: '#ffffff', 
+                            border: '1px solid #bae6fd', 
+                            color: '#0f172a', 
+                            borderRadius: '10px', 
+                            padding: '8px 12px', 
+                            fontWeight: 700, 
+                            fontSize: '0.95rem', 
+                            cursor: 'pointer',
+                            outline: 'none',
+                            boxShadow: '0 2px 5px rgba(0,0,0,0.02)'
+                          }}
+                        >
+                          {Object.entries(ZONE_RISK_PROFILES).map(([id, z]) => (
+                            <option key={id} value={id} style={{ color: '#0f172a', background: '#fff' }}>{z.name} ({z.waterloggingRisk} Risk)</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ fontSize: '0.88rem', color: '#334155', lineHeight: '1.5', padding: '10px 14px', background: 'rgba(255,255,255,0.7)', borderRadius: '10px', borderLeft: '3px solid var(--primary)', border: '1px solid #e0f2fe', borderLeftWidth: '3px' }}>
+                        {zoneProfile.insight}
+                      </div>
+                    </div>
+
+                    {/* Right: Quick Stats */}
+                    <div style={{ display: 'flex', gap: '24px', flexShrink: 0, fontSize: '0.82rem', background: '#ffffff', padding: '16px 24px', borderRadius: '16px', border: '1px solid #bae6fd', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: '#64748b', marginBottom: '6px', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Flood Risk</div>
+                        <div style={{ fontWeight: 800, fontSize: '1.3rem', color: zoneProfile.floodIncidents3yr > 10 ? '#dc2626' : '#059669' }}>{zoneProfile.floodIncidents3yr} <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>evts</span></div>
+                      </div>
+                      <div style={{ width: '1px', background: '#e2e8f0' }}></div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: '#64748b', marginBottom: '6px', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>R-Score</div>
+                        <div style={{ fontWeight: 800, fontSize: '1.3rem', color: '#d97706' }}>{rScore}</div>
+                      </div>
+                      <div style={{ width: '1px', background: '#e2e8f0' }}></div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: '#64748b', marginBottom: '6px', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Rain/Wk</div>
+                        <div style={{ fontWeight: 800, fontSize: '1.3rem', color: 'var(--primary)' }}>{weeklyRain}<span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>mm</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Activated confirmation */}
+                {activatedPlan && (
+                  <div style={{ marginBottom: '16px', padding: '14px 20px', background: '#ecfdf5', border: '1px solid #10b981', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <CheckCircle size={20} color="#10b981" />
+                    <span style={{ fontWeight: 700, color: '#059669' }}>✅ <b>{activatedPlan.name}</b> activated! Weekly premium: <b>₹{activatedPlan.premium}/wk</b>. Guidewire policy record created.</span>
+                    <button onClick={() => setActivatedPlan(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+                  </div>
+                )}
+
+                {/* Auto-responsive Grid for Plans */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }} className="animate-slide-up delay-200">
+                  {POLICY_CATALOG.map(policy => {
+                    const pricing = computeDynamicPremium(policy, riderInfo.zone || 'z1', rScore, walletBalance, weeklyRain);
+                    const isSelected = selectedPlan === policy.id;
+                    const isCurrentActive = activatedPlan && activatedPlan.id === policy.id;
+                    const showBreakdown = showPricingBreakdown === policy.id;
+                    return (
+                      <div
+                        key={policy.id}
+                        onClick={() => setSelectedPlan(policy.id)}
+                        style={{
+                          border: isSelected ? `2px solid ${policy.color}` : '1px solid var(--card-border)',
+                          borderRadius: '24px',
+                          background: isSelected ? 'var(--card-bg)' : 'var(--card-bg)',
+                          boxShadow: isSelected ? `0 16px 40px -12px ${policy.color}60` : '0 4px 12px rgba(0,0,0,0.03)',
+                          cursor: 'pointer',
+                          transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                          position: 'relative',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          transform: isSelected ? 'translateY(-4px)' : 'none'
+                        }}
+                      >
+                        {/* Top Accent Line */}
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '6px', background: policy.color }} />
+
+                        {/* Top Badges */}
+                        <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px' }}>
+                          {isCurrentActive && (
+                            <div style={{ background: '#10b981', color: 'white', fontSize: '0.65rem', fontWeight: 800, padding: '4px 10px', borderRadius: '20px', letterSpacing: '0.5px', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}>✅ ACTIVE</div>
+                          )}
+                          {policy.badge && !isCurrentActive && (
+                            <div style={{ background: policy.color, color: 'white', fontSize: '0.65rem', fontWeight: 800, padding: '4px 10px', borderRadius: '20px', letterSpacing: '0.5px' }}>{policy.badge}</div>
+                          )}
+                        </div>
+
+                        {/* Internal Card Content */}
+                        <div style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                          
+                          {/* Header section */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px', marginTop: '4px' }}>
+                            <div style={{ background: policy.accentColor, padding: '12px', borderRadius: '14px', flexShrink: 0 }}>
+                              <Shield size={24} color={policy.color} />
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--text-main)', lineHeight: 1.2 }}>{policy.name}</div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.3 }}>{policy.tagline}</div>
+                            </div>
+                          </div>
+
+                          {/* Dynamic Pricing Info Box */}
+                          <div style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.05)', borderRadius: '16px', padding: '16px', marginBottom: '16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                              <div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>AI Premium</div>
+                                <div style={{ fontSize: '2rem', fontWeight: 800, color: policy.color, lineHeight: 1 }}>₹{pricing.finalPremium}<span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>/wk</span></div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Max Payout</div>
+                                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', lineHeight: 1 }}>₹{policy.coverage.toLocaleString()}</div>
+                              </div>
+                            </div>
+
+                            {/* Savings/Bonus Pills */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {pricing.savings > 0 && (
+                                <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '8px', padding: '8px 12px', fontSize: '0.75rem', color: '#059669', fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><CheckCircle size={14} /> Zone & Behaviour Savings</span>
+                                  <span style={{ fontSize: '0.85rem' }}>-₹{pricing.savings}</span>
+                                </div>
+                              )}
+                              {pricing.bonusCoverageHours > policy.coverageHours && (
+                                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '8px 12px', fontSize: '0.75rem', color: '#2563eb', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <Clock size={14} /> +{pricing.bonusCoverageHours - policy.coverageHours}h bonus coverage (Clear Weather)
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Covered Triggers (Chips) */}
+                          <div style={{ marginBottom: '16px' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Triggers Monitored</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                              {policy.triggers.map((t, i) => (
+                                <span key={i} style={{ background: 'var(--bg-color)', border: '1px solid var(--card-border)', borderRadius: '8px', padding: '4px 10px', fontSize: '0.75rem', color: 'var(--text-main)', fontWeight: 500 }}>{t}</span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Perks List */}
+                          <div style={{ marginBottom: '24px', flex: 1 }}>
+                            {policy.perks.map((p, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '8px', fontWeight: 500 }}>
+                                <CheckCircle size={16} color={policy.color} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                <span>{p}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* AI Breakdown Accordion */}
+                          <div style={{ marginBottom: '16px' }}>
+                            <button
+                              onClick={e => { e.stopPropagation(); setShowPricingBreakdown(showBreakdown ? null : policy.id); }}
+                              style={{ width: '100%', background: showBreakdown ? 'var(--bg-color)' : 'transparent', border: `1px solid ${policy.color}30`, color: policy.color, borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.2s' }}
+                            >
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><BrainCircuit size={16} /> AI Pricing Breakdown</span>
+                              <span>{showBreakdown ? '▲' : '▼'}</span>
+                            </button>
+
+                            {/* Expanded Breakdown */}
+                            {showBreakdown && (
+                              <div className="animate-slide-up" style={{ background: 'var(--bg-color)', border: '1px solid var(--card-border)', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '16px', fontSize: '0.8rem', marginTop: '-4px', position: 'relative', zIndex: 0 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: 'var(--text-main)', fontWeight: 500 }}>
+                                  <span>📍 HazardHub Zone multiplier</span>
+                                  <span style={{ fontWeight: 800, color: pricing.breakdown.zoneMultiplier > 1 ? '#ef4444' : '#10b981' }}>{pricing.breakdown.zoneMultiplier}×</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: 'var(--text-main)', fontWeight: 500 }}>
+                                  <span>🌧️ 7-Day Weather multiplier</span>
+                                  <span style={{ fontWeight: 800, color: pricing.breakdown.weatherMultiplier > 1 ? '#f59e0b' : '#10b981' }}>{pricing.breakdown.weatherMultiplier}×</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: 'var(--text-main)', fontWeight: 500 }}>
+                                  <span>🏆 R-Score behavioural reward</span>
+                                  <span style={{ fontWeight: 800, color: '#10b981' }}>-₹{pricing.breakdown.rScoreDiscount}</span>
+                                </div>
+                                {pricing.breakdown.walletCredit > 0 && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)', fontWeight: 500, borderTop: '1px solid var(--card-border)', paddingTop: '8px', marginTop: '4px' }}>
+                                    <span>💰 Resilience Wallet auto-credit</span>
+                                    <span style={{ fontWeight: 800, color: '#10b981' }}>-₹{pricing.breakdown.walletCredit}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* CTA Button */}
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              initiatePolicy();
+                              setActivatedPlan({ id: policy.id, name: policy.name, premium: pricing.finalPremium });
+                              setSelectedPlan(policy.id);
+                            }}
+                            className={isCurrentActive ? '' : 'btn'}
+                            style={{
+                              width: '100%',
+                              padding: '16px',
+                              background: isCurrentActive ? '#10b981' : isSelected ? policy.color : 'transparent',
+                              color: isCurrentActive ? 'white' : isSelected ? 'white' : policy.color,
+                              border: isCurrentActive ? 'none' : isSelected ? 'none' : `2px solid ${policy.color}`,
+                              borderRadius: '12px',
+                              fontWeight: 800,
+                              fontSize: '1rem',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              gap: '8px',
+                              boxShadow: isSelected && !isCurrentActive ? `0 8px 16px ${policy.color}40` : 'none',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            {isCurrentActive ? <><CheckCircle size={20} /> Currently Active Plan</> : isSelected ? `Activate ${policy.name}` : 'Select Plan'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+              );
+            })()}
+
+
             {riderTab === 'file-claim' && (
               <>
                 <header style={{ marginBottom: '32px' }}>
@@ -1101,18 +1744,32 @@ export default function App() {
                   <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Manage how your approved claims are credited to your bank.</p>
                 </header>
 
-                <div className="grid-2 animate-slide-up delay-200" style={{ marginBottom: '32px' }}>
+                <div className="grid-3 animate-slide-up delay-200" style={{ marginBottom: '32px' }}>
+                  {/* Payout Balance */}
                   <div className="card" style={{ background: 'var(--primary)', color: 'white' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
-                      <span style={{ opacity: 0.8 }}>Available Balance</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                      <span style={{ opacity: 0.8 }}>Total Payouts</span>
                       <Landmark size={20} />
                     </div>
-                    <h1 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>₹{walletBalance.toFixed(2)}</h1>
-                    <p style={{ fontSize: '0.9rem', opacity: 0.9 }}>Available for withdrawal instantly via UPI</p>
+                    <h1 style={{ fontSize: '2.4rem', marginBottom: '8px' }}>₹{claims.reduce((acc, curr) => !curr.status.includes('Pending') ? acc + Number(curr.amount || 0) : acc, 0).toFixed(2)}</h1>
+                    <p style={{ fontSize: '0.85rem', opacity: 0.9 }}>Earnings from parametric claims</p>
 
-                    <button className="btn" style={{ background: 'white', color: 'var(--primary)', width: '100%', marginTop: '24px', fontWeight: 600 }}>
+                    <button className="btn" style={{ background: 'white', color: 'var(--primary)', width: '100%', marginTop: 'auto', fontWeight: 600 }}>
                       Withdraw to Bank
                     </button>
+                  </div>
+
+                  {/* Resilience Wallet (Micro-Savings) */}
+                  <div className="card" style={{ background: 'linear-gradient(135deg, #FFC72C 0%, #d97706 100%)', color: '#003366', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <span style={{ opacity: 0.9, fontWeight: 700 }}>Resilience Wallet</span>
+                      <ShieldCheck size={20} color="#003366" />
+                    </div>
+                    <h1 style={{ fontSize: '2.4rem', marginBottom: '4px', fontWeight: 800 }}>₹{walletBalance.toFixed(2)}</h1>
+                    <div style={{ background: 'rgba(0,51,102,0.1)', padding: '4px 10px', borderRadius: '12px', display: 'inline-flex', fontSize: '0.75rem', fontWeight: 700, marginBottom: '12px', alignSelf: 'flex-start', color: '#003366' }}>Micro-Savings</div>
+                    <p style={{ fontSize: '0.85rem', opacity: 0.9, flex: 1, fontWeight: 500 }}>
+                      Generated from a portion of your premiums. Maintain a claim-free streak to unlock a <strong>"Free Coverage Week"</strong>!
+                    </p>
                   </div>
 
                   <div className="card glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1908,39 +2565,41 @@ export default function App() {
           {adminTab === 'policies' && (
             <>
               <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Live Policy Management</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Configure weekly insurance plans and parametric limits across the worker pool.</p>
+                <h1 className="animate-slide-up">Policy Management</h1>
+                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Configure weekly insurance plans and parametric limits.</p>
               </header>
-              <div className="table-container card glass-panel">
-                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: 'rgba(0,0,0,0.03)' }}>
-                      <th style={{ padding: '16px' }}>Policy ID</th>
-                      <th style={{ padding: '16px' }}>Worker ID</th>
-                      <th style={{ padding: '16px' }}>Tier</th>
-                      <th style={{ padding: '16px' }}>Premium Details</th>
-                      <th style={{ padding: '16px' }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {adminData.policies && adminData.policies.length > 0 ? adminData.policies.map((pol, idx) => (
-                      <tr key={pol.id} style={{ borderTop: idx > 0 ? '1px solid var(--card-border)' : 'none', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                         <td style={{ padding: '16px', fontWeight: 500 }}>POL-{pol.id}</td>
-                         <td style={{ padding: '16px' }}>WRK-{pol.worker_id}</td>
-                         <td style={{ padding: '16px' }}>{pol.tier}</td>
-                         <td style={{ padding: '16px' }}>
-                           <div style={{ fontSize: '0.85rem' }}>Paid: <b>₹{pol.premium_paid}</b></div>
-                           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Coverage: ₹{pol.coverage_amount}</div>
-                         </td>
-                         <td style={{ padding: '16px' }}>
-                           <span className={`badge ${pol.status === 'ACTIVE' ? 'badge-green' : 'badge-orange'}`}>{pol.status}</span>
-                         </td>
-                      </tr>
-                    )) : (
-                      <tr><td colSpan="5" style={{ padding: '16px', textAlign: 'center' }}>No active policies found.</td></tr>
-                    )}
-                  </tbody>
-                 </table>
+              <div className="grid-3 animate-slide-up delay-200">
+                <div className="card glass-panel">
+                  <h3>Basic Plan</h3>
+                  <h2 style={{ margin: '16px 0', color: 'var(--primary)' }}>₹25 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ week</span></h2>
+                  <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    <li>Max Payout: ₹800</li>
+                    <li>Rain & Heat Only</li>
+                    <li>48h Claim Processing</li>
+                  </ul>
+                  <button className="btn btn-outline" style={{ width: '100%' }}>Edit Plan</button>
+                </div>
+                <div className="card glass-panel" style={{ border: '1px solid var(--accent-green)' }}>
+                  <span className="badge badge-green" style={{ float: 'right' }}>Most Popular</span>
+                  <h3>Standard Plan</h3>
+                  <h2 style={{ margin: '16px 0', color: 'var(--primary)' }}>₹40 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ week</span></h2>
+                  <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    <li>Max Payout: ₹1,500</li>
+                    <li>All Weather Triggers</li>
+                    <li>2h Claim Processing</li>
+                  </ul>
+                  <button className="btn btn-primary" style={{ width: '100%' }}>Edit Plan</button>
+                </div>
+                <div className="card glass-panel">
+                  <h3>Premium Plan</h3>
+                  <h2 style={{ margin: '16px 0', color: 'var(--primary)' }}>₹85 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ week</span></h2>
+                  <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    <li>Max Payout: ₹3,500</li>
+                    <li>All Triggers + Strikes</li>
+                    <li>Instant Payouts</li>
+                  </ul>
+                  <button className="btn btn-outline" style={{ width: '100%' }}>Edit Plan</button>
+                </div>
               </div>
             </>
           )}
