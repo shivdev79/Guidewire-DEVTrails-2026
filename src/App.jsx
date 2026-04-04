@@ -2061,13 +2061,13 @@ export default function App() {
                 <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Active API endpoints generating parametric truths.</p>
               </header>
               <div className="grid-3">
-                {PREDEFINED_TRIGGERS.map((t, idx) => (
+                {['Heavy Rain (>50mm/hr)', 'Extreme Heat (>45°C)', 'Government Lockdown', 'Air Quality (AQI > 400)', 'Road Network Failure', 'Cellular Outage'].map((condition, idx) => (
                   <div key={idx} className="card glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <div style={{ padding: '12px', background: 'rgba(0,115,152,0.1)', borderRadius: '12px', color: 'var(--primary)' }}>
-                      {t.icon}
+                      <Activity size={24} />
                     </div>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>{t.condition}</div>
+                      <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>{condition}</div>
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                         <div style={{ width: 8, height: 8, background: 'var(--accent-green)', borderRadius: '50%' }}></div> Polling Every 60s
                       </div>
@@ -2087,31 +2087,10 @@ export default function App() {
               <div className="grid-2">
                 <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h3 style={{ marginBottom: '4px' }}>Weekly Claims Report</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>All processed constraints & amounts.</p>
+                    <h3 style={{ marginBottom: '4px' }}>Full Immutable Ledger Export (JSON)</h3>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Downloads the complete SQLite dataset representing all Workers, Claims, and Policies directly to your machine.</p>
                   </div>
-                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> CSV</button>
-                </div>
-                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ marginBottom: '4px' }}>Fraud Investigation Log</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Suspicious telemetry trails flagged.</p>
-                  </div>
-                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> Excel</button>
-                </div>
-                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ marginBottom: '4px' }}>Disruption Impact Analysis</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Geographical breakdown of loss.</p>
-                  </div>
-                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> PDF</button>
-                </div>
-                <div className="card glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ marginBottom: '4px' }}>Monthly Payout Ledger</h3>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Cross-referenced banking transcripts.</p>
-                  </div>
-                  <button className="btn btn-outline" style={{ display: 'flex', gap: '8px' }}><Download size={16} /> Excel</button>
+                  <button onClick={downloadSQLiteDump} className="btn btn-primary" style={{ display: 'flex', gap: '8px', cursor: 'pointer' }}><Download size={16} /> JSON DUMP</button>
                 </div>
               </div>
             </>

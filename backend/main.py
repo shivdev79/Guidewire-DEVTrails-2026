@@ -10,6 +10,7 @@ import schemas
 import config
 from database import engine, get_db
 from premium_engine import PremiumEngine
+from demo_mode import DemoModeController, DemoScenario
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -23,6 +24,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ==================== WORKER ENDPOINTS ====================
 
 @app.post("/register", response_model=schemas.WorkerResponse)
 def register_worker(worker: schemas.WorkerCreate, db: Session = Depends(get_db)):
@@ -43,6 +46,8 @@ def get_worker(worker_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Worker not found")
     return worker
 
+# ==================== PREMIUM ENDPOINTS ====================
+
 @app.post("/calculate-premium")
 def calculate_premium(request: schemas.PremiumRequest, db: Session = Depends(get_db)):
     worker = db.query(models.Worker).filter(models.Worker.id == request.worker_id).first()
@@ -52,8 +57,9 @@ def calculate_premium(request: schemas.PremiumRequest, db: Session = Depends(get
     coverage_map = {"Base": 3000.0, "Pro": 5000.0, "Elite": 8000.0}
     coverage_amount = coverage_map.get(request.tier, 3000.0)
 
-    # Defer to Modular Engine
     return PremiumEngine.calculate_weekly_premium(worker, coverage_amount)
+
+# ==================== POLICY ENDPOINTS ====================
 
 @app.post("/create-policy", response_model=schemas.PolicyResponse)
 def create_policy(policy: schemas.PolicyCreate, db: Session = Depends(get_db)):
@@ -64,7 +70,6 @@ def create_policy(policy: schemas.PolicyCreate, db: Session = Depends(get_db)):
     if not policy.accepted_terms:
         raise HTTPException(status_code=400, detail="Must explicitly accept strict T&C to activate policy.")
     
-    # Store the legal consent timestamp
     worker.terms_accepted_at = datetime.datetime.utcnow()
     
     active_policy = db.query(models.Policy).filter(
@@ -97,7 +102,6 @@ def create_policy(policy: schemas.PolicyCreate, db: Session = Depends(get_db)):
     )
     
     db.add(new_policy)
-    # The 20% resilience wallet gamification 
     worker.wallet_balance += (premium_paid * 0.2)
     
     db.commit()
@@ -111,20 +115,12 @@ def simulate_rebate(worker_id: int, db: Session = Depends(get_db)):
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
     
-    rebate_amount = 30.0 # Random fixed mock rebate
+    rebate_amount = 30.0
     worker.wallet_balance += rebate_amount
     db.commit()
     return {"status": "success", "message": f"Mid-week risk evaporated. Issued ₹{rebate_amount} partial rebate.", "wallet_balance": worker.wallet_balance}
 
-@app.post("/webhooks/national-disaster")
-async def force_majeure_circuit_breaker(request: Request):
-    """The enterprise webhook simulation for Black Swan events."""
-    payload = await request.json()
-    if payload.get("directive") == "FREEZE_ALL_PARAMETRIC_PAYOUTS":
-        config.CIRCUIT_BREAKER_ACTIVE = True
-        logger.critical(f"CIRCUIT BREAKER ENGAGED GLOBALLY! Event: {payload.get('event_type')}")
-        return {"status": "SUCCESS", "message": "Circuit breaker is active. All platform claims are halted to protect reinsurer capital."}
-    return {"status": "IGNORED"}
+# ==================== CLAIMS ENDPOINTS ====================
 
 @app.post("/claim/manual")
 def submit_manual_claim(claim_req: schemas.ManualClaimCreate, db: Session = Depends(get_db)):
@@ -145,6 +141,8 @@ def submit_manual_claim(claim_req: schemas.ManualClaimCreate, db: Session = Depe
     db.refresh(claim)
     return {"status": "success", "claim_id": claim.id}
 
+# ==================== ADMIN ENDPOINTS ====================
+
 @app.get("/admin/ledger")
 def get_admin_ledger(db: Session = Depends(get_db)):
     workers = db.query(models.Worker).all()
@@ -161,7 +159,8 @@ def get_admin_ledger(db: Session = Depends(get_db)):
         "metrics": {
             "total_liquidity_exposure": total_liquidity,
             "total_claims_paid": total_paid,
-            "circuit_breaker_active": config.CIRCUIT_BREAKER_ACTIVE
+            "circuit_breaker_active": config.CIRCUIT_BREAKER_ACTIVE,
+            "demo_mode_active": DemoModeController.get_active_scenario() is not None
         }
     }
 
@@ -183,11 +182,398 @@ def get_dashboard(worker_id: int, db: Session = Depends(get_db)):
         "past_policies": past_policies,
         "claims": claims,
         "system_status": {
-            "circuit_breaker_active": config.CIRCUIT_BREAKER_ACTIVE
+            "circuit_breaker_active": config.CIRCUIT_BREAKER_ACTIVE,
+            "demo_mode_active": DemoModeController.get_active_scenario() is not None
         }
     }
 
+# ==================== CIRCUIT BREAKER ENDPOINTS ====================
+
+@app.post("/webhooks/national-disaster")
+async def force_majeure_circuit_breaker(request: Request):
+    """Emergency webhook for black-swan events"""
+    payload = await request.json()
+    if payload.get("directive") == "FREEZE_ALL_PARAMETRIC_PAYOUTS":
+        config.CIRCUIT_BREAKER_ACTIVE = True
+        logger.critical(f"CIRCUIT BREAKER ENGAGED! Event: {payload.get('event_type')}")
+        return {"status": "SUCCESS", "message": "Circuit breaker is active. All platform claims are halted."}
+    return {"status": "IGNORED"}
+
+# ==================== DEMO MODE ENDPOINTS (FOR LIVE DEMONSTRATIONS) ====================
+
+@app.post("/demo/activate-scenario")
+def activate_demo_scenario(scenario_request: dict):
+    """
+    Activate a demo scenario for live demonstration
+    
+    Example: {"scenario": "heavy_rain"}
+    Options: heavy_rain, extreme_heat, critical_aqi, civic_strike, platform_crash, clear_weather
+    
+    Once activated, all workers will trigger this disruption on the next scheduler run.
+    """
+    scenario_name = scenario_request.get("scenario", "").upper()
+    
+    try:
+        scenario = DemoScenario[scenario_name]
+        result = DemoModeController.activate_scenario(scenario)
+        return result
+    except KeyError:
+        return {
+            "status": "ERROR",
+            "message": f"Invalid scenario. Options: {[s.value for s in DemoScenario]}",
+            "error": f"Unknown scenario: {scenario_name}"
+        }
+
+@app.post("/demo/deactivate")
+def deactivate_demo():
+    """Deactivate demo mode and return to normal operation"""
+    return DemoModeController.deactivate_scenario()
+
+@app.get("/demo/status")
+def get_demo_status():
+    """Get current demo mode status"""
+    return DemoModeController.get_demo_status()
+
+@app.get("/demo/scenarios")
+def list_demo_scenarios():
+    """List all available demo scenarios"""
+    return {
+        "available_scenarios": [
+            {
+                "name": scenario.value,
+                "description": {
+                    "heavy_rain": "🌧️ Heavy Rain: Workers report zero delivery capacity due to 65mm+ rainfall",
+                    "extreme_heat": "🔥 Extreme Heat: Temperature exceeds 44°C. Outdoor work hazardous.",
+                    "critical_aqi": "💨 Critical AQI: Air pollution spike to 350+ AQI. Deliveries halted.",
+                    "civic_strike": "🚨 Civic Strike: Unannounced market closure. Workers stuck.",
+                    "platform_crash": "💻 Platform API Down: Gig platform servers crash. No orders.",
+                    "clear_weather": "✅ Clear: Normal conditions. No disruptions."
+                }.get(scenario.value, "Unknown")
+            }
+            for scenario in DemoScenario
+        ],
+        "usage": "POST /demo/activate-scenario with {\"scenario\": \"heavy_rain\"}"
+    }
+
+# ==================== STARTUP & SHUTDOWN ====================
+
 from scheduler import start_scheduler
+from datetime import datetime
+
+# ==================== INSTANT DEMO TRIGGERS (For Live Demonstrations) ====================
+
+@app.post("/demo/trigger-heavy-rain/{worker_id}")
+def demo_trigger_heavy_rain(worker_id: int, db: Session = Depends(get_db)):
+    """
+    INSTANT: Inject a heavy rain claim for demo.
+    Perfect for showing claim auto-approval immediately.
+    """
+    try:
+        worker = db.query(models.Worker).filter(models.Worker.id == worker_id).first()
+        if not worker:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        
+        policy = db.query(models.Policy).filter(
+            models.Policy.worker_id == worker_id,
+            models.Policy.status == "ACTIVE"
+        ).first()
+        
+        if not policy:
+            raise HTTPException(status_code=400, detail="No active policy. Create policy first.")
+        
+        # Create instant APPROVED claim
+        claim = models.Claim(
+            worker_id=worker_id,
+            trigger_type="DEMO_HEAVY_RAIN",
+            description="🌧️ [DEMO] Heavy rainfall detected (65mm/hr forecast) - Deliveries halted - Income loss verified",
+            status="APPROVED",
+            payout_amount=policy.coverage_amount * 0.5,
+            fraud_score=0.05,
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(claim)
+        db.commit()
+        db.refresh(claim)
+        
+        logger.info(f"⚡ DEMO: Heavy Rain claim #{claim.id} APPROVED instantly for worker {worker_id}")
+        
+        return {
+            "status": "SUCCESS",
+            "message": "🌧️ Heavy Rain Disruption - Instant Claim Approved!",
+            "claim": {
+                "id": claim.id,
+                "trigger_type": claim.trigger_type,
+                "status": claim.status,
+                "payout_amount": claim.payout_amount,
+                "fraud_score": claim.fraud_score
+            },
+            "worker_notification": f"✅ Disruption verified. ₹{claim.payout_amount} will be credited to your UPI shortly.",
+            "payout_status": "QUEUED_FOR_RAZORPAY_UPI_TRANSFER"
+        }
+    
+    except Exception as e:
+        logger.error(f"Demo trigger failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/demo/trigger-extreme-heat/{worker_id}")
+def demo_trigger_extreme_heat(worker_id: int, db: Session = Depends(get_db)):
+    """INSTANT: Inject extreme heat claim for demo"""
+    try:
+        worker = db.query(models.Worker).filter(models.Worker.id == worker_id).first()
+        if not worker:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        
+        policy = db.query(models.Policy).filter(
+            models.Policy.worker_id == worker_id,
+            models.Policy.status == "ACTIVE"
+        ).first()
+        
+        if not policy:
+            raise HTTPException(status_code=400, detail="No active policy")
+        
+        claim = models.Claim(
+            worker_id=worker_id,
+            trigger_type="DEMO_EXTREME_HEAT",
+            description="🔥 [DEMO] Extreme temperature alert (44.5°C) - Outdoor work unsafe - Income protection triggered",
+            status="APPROVED",
+            payout_amount=policy.coverage_amount * 0.4,
+            fraud_score=0.03,
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(claim)
+        db.commit()
+        db.refresh(claim)
+        
+        logger.info(f"⚡ DEMO: Extreme Heat claim #{claim.id} APPROVED for worker {worker_id}")
+        
+        return {
+            "status": "SUCCESS",
+            "message": "🔥 Extreme Heat Disruption - Claim Auto-Approved!",
+            "claim": {
+                "id": claim.id,
+                "trigger_type": claim.trigger_type,
+                "status": claim.status,
+                "payout_amount": claim.payout_amount,
+                "fraud_score": claim.fraud_score
+            },
+            "worker_notification": f"✅ Heat hazard verified. ₹{claim.payout_amount} instant payout initiated.",
+            "payout_status": "RAZORPAY_UPI_INITIATED"
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/demo/trigger-civic-strike/{worker_id}")
+def demo_trigger_civic_strike(worker_id: int, db: Session = Depends(get_db)):
+    """INSTANT: Inject civic strike claim for demo"""
+    try:
+        worker = db.query(models.Worker).filter(models.Worker.id == worker_id).first()
+        if not worker:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        
+        policy = db.query(models.Policy).filter(
+            models.Policy.worker_id == worker_id,
+            models.Policy.status == "ACTIVE"
+        ).first()
+        
+        if not policy:
+            raise HTTPException(status_code=400, detail="No active policy")
+        
+        claim = models.Claim(
+            worker_id=worker_id,
+            trigger_type="DEMO_CIVIC_STRIKE",
+            description="🚨 [DEMO] Unannounced civic strike detected (Movement restricted) - Pickup zone inaccessible - Zero orders",
+            status="APPROVED",
+            payout_amount=policy.coverage_amount * 0.6,
+            fraud_score=0.08,
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(claim)
+        db.commit()
+        db.refresh(claim)
+        
+        logger.info(f"⚡ DEMO: Civic Strike claim #{claim.id} APPROVED for worker {worker_id}")
+        
+        return {
+            "status": "SUCCESS",
+            "message": "🚨 Civic Strike Detected - Income Loss Compensation Approved!",
+            "claim": {
+                "id": claim.id,
+                "trigger_type": claim.trigger_type,
+                "status": claim.status,
+                "payout_amount": claim.payout_amount,
+                "fraud_score": claim.fraud_score
+            },
+            "worker_notification": f"✅ Curfew/Strike verified. ₹{claim.payout_amount} compensation approved.",
+            "payout_status": "RAZORPAY_TRANSFER_IN_PROGRESS"
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/demo/trigger-fraud-rejection/{worker_id}")
+def demo_trigger_fraud_rejection(worker_id: int, db: Session = Depends(get_db)):
+    """INSTANT: Show fraud detection in action - REJECTING a bad claim"""
+    try:
+        worker = db.query(models.Worker).filter(models.Worker.id == worker_id).first()
+        if not worker:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        
+        policy = db.query(models.Policy).filter(
+            models.Policy.worker_id == worker_id,
+            models.Policy.status == "ACTIVE"
+        ).first()
+        
+        if not policy:
+            raise HTTPException(status_code=400, detail="No active policy")
+        
+        # Create REJECTED claim to show fraud detection works
+        claim = models.Claim(
+            worker_id=worker_id,
+            trigger_type="DEMO_FRAUD_TEST",
+            description="🛡️ [DEMO] Fraudulent claim blocked - GPS spoofing detected (Teleportation event: 15km in 3s)",
+            status="REJECTED",
+            payout_amount=0.0,
+            fraud_score=0.98,  # Very high fraud score
+            rejection_reason="GPS Spoofing: Device showed impossible movement pattern. Claim blocked by Zero-Trust Fraud Engine.",
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(claim)
+        db.commit()
+        db.refresh(claim)
+        
+        logger.warning(f"🛡️ DEMO: Fraud test claim #{claim.id} REJECTED with score 0.98 for worker {worker_id}")
+        
+        return {
+            "status": "SUCCESS",
+            "message": "🛡️ Fraud Detection Demo - Malicious Claim BLOCKED!",
+            "claim": {
+                "id": claim.id,
+                "trigger_type": claim.trigger_type,
+                "status": claim.status,
+                "payout_amount": claim.payout_amount,
+                "fraud_score": claim.fraud_score,
+                "rejection_reason": claim.rejection_reason
+            },
+            "fraud_analysis": {
+                "anomaly_detected": "Spatial CNN: Teleportation event",
+                "confidence": "98%",
+                "action": "CLAIM BLOCKED",
+                "worker_notification": "⚠️ Your claim was rejected. Device telemetry showed impossible GPS coordinates. Please contact support if this is an error."
+            },
+            "security_verdict": "ZERO_TRUST_VALIDATION_FAILED"
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/demo/simulate-upi-payout/{claim_id}")
+def demo_upi_payout(claim_id: int, db: Session = Depends(get_db)):
+    """INSTANT: Simulate UPI payout to worker's account"""
+    try:
+        claim = db.query(models.Claim).filter(models.Claim.id == claim_id).first()
+        if not claim:
+            raise HTTPException(status_code=404, detail="Claim not found")
+        
+        if claim.status != "APPROVED":
+            raise HTTPException(status_code=400, detail="Only approved claims can be paid")
+        
+        worker = db.query(models.Worker).filter(models.Worker.id == claim.worker_id).first()
+        
+        # Mock Razorpay response
+        payout_response = {
+            "status": "SUCCESS",
+            "message": "💰 UPI Payout Processed Successfully!",
+            "payout_details": {
+                "amount": claim.payout_amount,
+                "recipient": worker.upi_id,
+                "worker_name": worker.name,
+                "claim_id": claim_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "reference_id": f"AEGIS_PAY_{claim_id}_{worker.id}",
+                "gateway": "Razorpay (Mock)",
+                "status": "COMPLETED",
+                "estimated_delivery": "5 seconds"
+            },
+            "worker_sms": f"✅ ₹{claim.payout_amount} transferred to your UPI {worker.upi_id}. Claim #{claim_id}. AEGIS",
+            "worker_app_notification": f"Your income protection payout of ₹{claim.payout_amount} has been credited!",
+            "time_to_payout_seconds": 47  # Demonstrates sub-90 second target
+        }
+        
+        logger.info(f"💰 DEMO: UPI Payout ₹{claim.payout_amount} to {worker.upi_id} (Claim #{claim_id})")
+        
+        return payout_response
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/demo/quick-test/{worker_id}")
+def demo_quick_test(worker_id: int, db: Session = Depends(get_db)):
+    """
+    Quick test: Register → Policy → Instant Trigger → Show Claim
+    Perfect for 30-second demo to judges
+    """
+    try:
+        worker = db.query(models.Worker).filter(models.Worker.id == worker_id).first()
+        if not worker:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        
+        policy = db.query(models.Policy).filter(
+            models.Policy.worker_id == worker_id,
+            models.Policy.status == "ACTIVE"
+        ).first()
+        
+        claims = db.query(models.Claim).filter(
+            models.Claim.worker_id == worker_id
+        ).order_by(models.Claim.id.desc()).limit(5).all()
+        
+        return {
+            "status": "DEMO_READY",
+            "timestamp": datetime.utcnow().isoformat(),
+            "quick_demo_steps": [
+                "1. ✅ Worker registered" if worker else "1. ❌ Worker not found",
+                "2. ✅ Policy active" if policy else "2. ⏳ Create policy first",
+                "3. ⚡ Click demo trigger button to inject disruption",
+                "4. 🎯 Claim auto-generates and approves instantly",
+                "5. 💰 Payout simulates to worker's UPI"
+            ],
+            "worker_info": {
+                "id": worker.id,
+                "name": worker.name,
+                "earnings": worker.avg_weekly_earnings,
+                "r_score": worker.r_score,
+                "wallet_balance": worker.wallet_balance,
+                "platform": worker.platform,
+                "city": worker.city,
+                "pincode": worker.pincode
+            },
+            "policy_info": {
+                "active": policy is not None,
+                "coverage_amount": policy.coverage_amount if policy else None,
+                "premium": policy.premium_paid if policy else None,
+                "status": policy.status if policy else None
+            },
+            "recent_claims": [
+                {
+                    "id": c.id,
+                    "type": c.trigger_type,
+                    "status": c.status,
+                    "amount": c.payout_amount,
+                    "fraud_score": c.fraud_score
+                }
+                for c in claims
+            ]
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== STARTUP & SHUTDOWN ====================
+
 @app.on_event("startup")
 def startup_event():
     start_scheduler()
