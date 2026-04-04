@@ -35,6 +35,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+@keyframes chatbot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.chatbot-spin {
+  animation: chatbot-spin 0.9s linear infinite;
+}
+
 #root {
   min-height: 100vh;
   display: flex;

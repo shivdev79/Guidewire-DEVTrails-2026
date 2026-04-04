@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, field_validator
+from typing import Optional, Any
 from datetime import datetime
 
 class WorkerCreate(BaseModel):
@@ -58,3 +58,23 @@ class ManualClaimCreate(BaseModel):
     reason: str
     description: str
     amount: float
+
+
+class WalletTopUpRequest(BaseModel):
+    amount: float
+    payment_method: str = "UPI"  # UPI | NETBANKING | CARD | OTHER
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def coerce_amount(cls, v: Any) -> float:
+        if isinstance(v, str):
+            cleaned = v.strip().replace(",", "").replace("₹", "").replace("Rs", "").replace("rs", "").strip()
+            return float(cleaned) if cleaned else 0.0
+        return float(v)
+
+class AIChatRequest(BaseModel):
+    message: str
+    context: Optional[dict] = None
+
+class AIChatResponse(BaseModel):
+    response: str
