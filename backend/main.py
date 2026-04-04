@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 import datetime
+from datetime import datetime, timedelta
 import uvicorn
 import logging
 
@@ -11,6 +13,8 @@ import config
 from database import engine, get_db
 from premium_engine import PremiumEngine
 from demo_mode import DemoModeController, DemoScenario
+from scheduler import start_scheduler
+import traceback
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -19,11 +23,43 @@ app = FastAPI(title="AEGIS: Zero-Trust Parametric Startup MVP")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ==================== AI CHAT ENDPOINT ====================
+
+@app.post("/ai-chat", response_model=schemas.AIChatResponse)
+def ai_chat(body: schemas.AIChatRequest):
+    msg = body.message.lower()
+    ctx = body.context or {}
+    name = ctx.get("rider_name", "Partner")
+    has_policy = ctx.get("has_policy", False)
+    plan = ctx.get("plan_name", "No Active Plan")
+    balance = ctx.get("wallet_balance", 0)
+
+    # Simple keyword-based AI logic
+    if "hello" in msg or "hi" in msg:
+        resp = f"Hello {name}! I'm the Aegis Virtual Assistant. How can I help you with your income protection today?"
+    elif "payout" in msg or "claim" in msg or "money" in msg:
+        if has_policy:
+            resp = f"I see you're covered under the **{plan}**. Payouts are triggered automatically when weather or traffic data breaches your plan's thresholds. You can track all approved amounts in your **Wallet** tab."
+        else:
+            resp = "You don't have an active policy currently. Payouts only trigger when you have an active Shield plan. Check out the **Explore Plans** tab to get started!"
+    elif "refund" in msg:
+        resp = "Manual claim refunds are processed within 24-48 hours once our AI validates the disruption event. Approved funds are instantly credited to your Aegis Wallet."
+    elif "wallet" in msg or "balance" in msg:
+        resp = f"Your current Aegis Wallet balance is **₹{balance}**. You can use this for plan purchases or withdraw it to your bank account via UPI."
+    elif "upgrade" in msg:
+        resp = "You can upgrade your coverage anytime from the **Explore Plans** tab. Upgrading to a higher tier like Elite provides lower rain thresholds and higher payout limits!"
+    elif "thank" in msg:
+        resp = f"You're very welcome, {name}! Is there anything else you need help with?"
+    else:
+        resp = "That's a great question! As an Aegis Assistant, I can help you with policy details, automatic claim triggers, or wallet payouts. Could you please specify which part of the Aegis platform you're asking about?"
+
+    return {"response": resp}
 
 # ==================== WORKER ENDPOINTS ====================
 
@@ -31,7 +67,7 @@ app.add_middleware(
 def register_worker(worker: schemas.WorkerCreate, db: Session = Depends(get_db)):
     db_worker = db.query(models.Worker).filter(models.Worker.phone == worker.phone).first()
     if db_worker:
-        raise HTTPException(status_code=400, detail="Phone already registered")
+        return db_worker
     
     new_worker = models.Worker(**worker.dict(), r_score=100.0, wallet_balance=0.0)
     db.add(new_worker)
@@ -45,6 +81,51 @@ def get_worker(worker_id: int, db: Session = Depends(get_db)):
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
     return worker
+
+
+def _wallet_topup_description(payment_method: str) -> str:
+    m = (payment_method or "UPI").strip().upper()
+    labels = {
+        "UPI": "Wallet top-up (UPI)",
+        "NETBANKING": "Wallet top-up (NetBanking)",
+        "CARD": "Wallet top-up (Debit / Credit Card)",
+        "OTHER": "Wallet top-up",
+    }
+    return labels.get(m, labels["OTHER"])
+
+
+@app.post("/worker/{worker_id}/wallet/top-up")
+def wallet_top_up(worker_id: int, body: schemas.WalletTopUpRequest, db: Session = Depends(get_db)):
+    if body.amount <= 0 or body.amount > 1_000_000:
+        raise HTTPException(status_code=400, detail="Invalid amount")
+    method = (body.payment_method or "UPI").strip().upper()
+    if method not in ("UPI", "NETBANKING", "CARD", "OTHER"):
+        raise HTTPException(status_code=400, detail="Invalid payment_method")
+    worker = db.query(models.Worker).filter(models.Worker.id == worker_id).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    worker.wallet_balance = (worker.wallet_balance or 0.0) + float(body.amount)
+    entry = models.WalletLedger(
+        worker_id=worker_id,
+        amount=float(body.amount),
+        description=_wallet_topup_description(method),
+        txn_type="CREDIT",
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(worker)
+    db.refresh(entry)
+    return {
+        "wallet_balance": worker.wallet_balance,
+        "transaction": {
+            "id": entry.id,
+            "amount": entry.amount,
+            "description": entry.description,
+            "txn_type": entry.txn_type,
+            "created_at": entry.created_at.isoformat() if entry.created_at else None,
+        },
+    }
+
 
 # ==================== PREMIUM ENDPOINTS ====================
 
@@ -63,50 +144,73 @@ def calculate_premium(request: schemas.PremiumRequest, db: Session = Depends(get
 
 @app.post("/create-policy", response_model=schemas.PolicyResponse)
 def create_policy(policy: schemas.PolicyCreate, db: Session = Depends(get_db)):
-    worker = db.query(models.Worker).filter(models.Worker.id == policy.worker_id).first()
-    if not worker:
-        raise HTTPException(status_code=404, detail="Worker not found")
+    try:
+        worker = db.query(models.Worker).filter(models.Worker.id == policy.worker_id).first()
+        if not worker:
+            raise HTTPException(status_code=404, detail="Worker not found")
+            
+        if not policy.accepted_terms:
+            raise HTTPException(status_code=400, detail="Must explicitly accept strict T&C to activate policy.")
         
-    if not policy.accepted_terms:
-        raise HTTPException(status_code=400, detail="Must explicitly accept strict T&C to activate policy.")
-    
-    worker.terms_accepted_at = datetime.datetime.utcnow()
-    
-    active_policy = db.query(models.Policy).filter(
-        models.Policy.worker_id == policy.worker_id,
-        models.Policy.status == "ACTIVE"
-    ).first()
-    
-    if active_policy:
-        raise HTTPException(status_code=400, detail="Worker already has an active policy")
+        worker.terms_accepted_at = datetime.utcnow()
+        
+        active_policy = db.query(models.Policy).filter(
+            models.Policy.worker_id == policy.worker_id,
+            models.Policy.status == "ACTIVE"
+        ).first()
+        
+        if active_policy:
+            if active_policy.tier == policy.tier:
+                return active_policy
+            else:
+                # Upgrade or switch plan: Cancel the old one. Overrides allow switching but user pays full price.
+                active_policy.status = "CANCELED_UPGRADED"
+                db.add(active_policy)
 
-    calc = PremiumEngine.calculate_weekly_premium(worker, 5000.0 if policy.tier == "Pro" else (8000.0 if policy.tier == "Elite" else 3000.0))
-    premium_paid = calc["premium_amount"]
-    coverage_amount = calc["coverage_amount"]
-    wallet_credit = calc["breakdown"]["wallet_credit_used"]
+        calc = PremiumEngine.calculate_weekly_premium(worker, 5000.0 if policy.tier == "Pro" else (8000.0 if policy.tier == "Elite" else 3000.0))
+        total_cost = calc["premium_amount"] + calc["breakdown"]["wallet_credit_used"]
+        coverage_amount = calc["coverage_amount"]
+        
+        if worker.wallet_balance < total_cost:
+            raise HTTPException(status_code=400, detail=f"Insufficient wallet balance (₹{worker.wallet_balance}) for this plan (₹{total_cost}). Please top up first.")
+        
+        worker.wallet_balance -= total_cost
+        db.add(
+            models.WalletLedger(
+                worker_id=worker.id,
+                amount=total_cost,
+                description=f"Plan purchase: {policy.tier} coverage",
+                txn_type="DEBIT",
+            )
+        )
+        
+        premium_paid = total_cost
 
-    if wallet_credit > 0:
-        worker.wallet_balance -= wallet_credit
+        week_start = datetime.utcnow()
+        week_end = week_start + timedelta(days=7)
 
-    week_start = datetime.datetime.utcnow()
-    week_end = week_start + datetime.timedelta(days=7)
-
-    new_policy = models.Policy(
-        worker_id=worker.id,
-        tier=policy.tier,
-        week_start=week_start,
-        week_end=week_end,
-        coverage_amount=coverage_amount,
-        premium_paid=premium_paid,
-        status="ACTIVE"
-    )
-    
-    db.add(new_policy)
-    worker.wallet_balance += (premium_paid * 0.2)
-    
-    db.commit()
-    db.refresh(new_policy)
-    return new_policy
+        new_policy = models.Policy(
+            worker_id=worker.id,
+            tier=policy.tier,
+            week_start=week_start,
+            week_end=week_end,
+            coverage_amount=coverage_amount,
+            premium_paid=premium_paid,
+            status="ACTIVE"
+        )
+        
+        db.add(new_policy)
+        worker.wallet_balance += (premium_paid * 0.2)
+        
+        db.commit()
+        db.refresh(new_policy)
+        return new_policy
+    except HTTPException as e:
+        # Re-raise explicit HTTP exceptions
+        raise e
+    except Exception as e:
+        # Raise unexpected errors as 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/simulate-rebate/{worker_id}")
 def simulate_rebate(worker_id: int, db: Session = Depends(get_db)):
@@ -175,12 +279,30 @@ def get_dashboard(worker_id: int, db: Session = Depends(get_db)):
     
     active_policy = next((p for p in policies if p.status == "ACTIVE"), None)
     past_policies = [p for p in policies if p.status != "ACTIVE"]
-    
+
+    ledger_rows = (
+        db.query(models.WalletLedger)
+        .filter(models.WalletLedger.worker_id == worker_id)
+        .order_by(desc(models.WalletLedger.created_at))
+        .limit(100)
+        .all()
+    )
+
     return {
         "worker": worker,
         "active_policy": active_policy,
         "past_policies": past_policies,
         "claims": claims,
+        "wallet_ledger": [
+            {
+                "id": row.id,
+                "amount": row.amount,
+                "description": row.description,
+                "txn_type": row.txn_type,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in ledger_rows
+        ],
         "system_status": {
             "circuit_breaker_active": config.CIRCUIT_BREAKER_ACTIVE,
             "demo_mode_active": DemoModeController.get_active_scenario() is not None
@@ -197,6 +319,10 @@ async def force_majeure_circuit_breaker(request: Request):
         config.CIRCUIT_BREAKER_ACTIVE = True
         logger.critical(f"CIRCUIT BREAKER ENGAGED! Event: {payload.get('event_type')}")
         return {"status": "SUCCESS", "message": "Circuit breaker is active. All platform claims are halted."}
+    elif payload.get("directive") == "UNFREEZE_ALL_PARAMETRIC_PAYOUTS":
+        config.CIRCUIT_BREAKER_ACTIVE = False
+        logger.warning(f"CIRCUIT BREAKER LIFTED! Event: {payload.get('event_type')}")
+        return {"status": "SUCCESS", "message": "Circuit breaker lifted. Normal operations have resumed."}
     return {"status": "IGNORED"}
 
 # ==================== DEMO MODE ENDPOINTS (FOR LIVE DEMONSTRATIONS) ====================
@@ -256,9 +382,6 @@ def list_demo_scenarios():
     }
 
 # ==================== STARTUP & SHUTDOWN ====================
-
-from scheduler import start_scheduler
-from datetime import datetime
 
 # ==================== INSTANT DEMO TRIGGERS (For Live Demonstrations) ====================
 

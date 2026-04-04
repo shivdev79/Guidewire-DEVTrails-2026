@@ -1,0 +1,207 @@
+﻿diff --cc src/App.jsx
+index 869ead9,ad324e9..0000000
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@@ -827,15 -906,190 +890,202 @@@ export default function App() 
+  );
+  
+    const renderOnboarding = () => (
+++<<<<<<< HEAD
+ +    <RegistrationFlow 
+ +      riderInfo={riderInfo}
+ +      setRiderInfo={setRiderInfo}
+ +      setWorkerId={setWorkerId}
+ +      setCurrentView={setCurrentView}
+ +      setCalculatedPremium={setCalculatedPremium}
+ +      setCoverageAmount={setCoverageAmount}
+ +      setRScore={setRScore}
+ +    />
+++=======
++     <div style={{ background: '#f8f9fa', minHeight: '100vh', padding: '40px 20px' }}>
++       <div className="container" style={{ maxWidth: '1200px' }}>
++         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
++           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
++             <Shield size={24} color="var(--primary)" /> AEGIS <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>| SECURE TRAILS</span>
++           </div>
++           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>
++             AI-Powered Parametric Protection for Gig Economy Partners
++           </p>
++         </div>
++ 
++         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '40px' }}>
++           {/* Left Side: Value Proposition */}
++           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
++ 
++             {/* Main Feature Card */}
++             <div className="card" style={{ background: 'white', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', position: 'relative', overflow: 'hidden' }}>
++               <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
++                 <div style={{ position: 'relative', width: '200px', height: '120px', background: '#e2e8f0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
++                   <div style={{ width: '40px', height: '40px', background: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
++                     <Activity size={20} fill="#ef4444" />
++                   </div>
++                   <div style={{ position: 'absolute', bottom: '12px', left: '12px', background: 'var(--accent-red)', color: 'white', fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px' }}>LIVE FEED</div>
++                 </div>
++                 <div>
++                   <h3 style={{ color: 'var(--accent-red)', fontSize: '1.1rem', marginBottom: '4px' }}>Signature Assure Shield</h3>
++                   <h2 style={{ fontSize: '1.8rem', marginBottom: '16px' }}>Protect Income with <br />Goal Assurance</h2>
++                 </div>
++               </div>
++             </div>
++ 
++             {/* Pay/Get Card */}
++             <div className="card" style={{ background: 'white', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '32px' }}>
++               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
++                 <img src="https://img.icons8.com/bubbles/100/000000/user-male.png" alt="Rider" style={{ width: '80px' }} />
++                 <div>
++                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
++                     <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>Pay</span>
++                     <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--primary)' }}>Γé╣40 p.w</span>
++                     <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>for active protection</span>
++                   </div>
++                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
++                     <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>Get</span>
++                     <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-green)' }}>Γé╣1,500*</span>
++                     <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>instant payout @disruption</span>
++                   </div>
++                 </div>
++               </div>
++             </div>
++ 
++             {/* Tax/Benefit Bar */}
++             <div style={{ background: 'rgba(0, 115, 152, 0.05)', padding: '12px 20px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px dashed var(--primary)' }}>
++               <Wallet size={20} color="var(--primary)" />
++               <span style={{ fontSize: '0.9rem', color: 'var(--primary)' }}>Get tax & platform benefits on premium paid u/s 80C & platform incentives</span>
++             </div>
++ 
++             {/* Benefits Section */}
++             <div>
++               <h3 style={{ marginBottom: '20px', fontWeight: 500 }}>Smart benefits for your family in your absence</h3>
++               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
++                 <div className="card" style={{ padding: '16px', textAlign: 'center', border: 'none', background: '#fff' }}>
++                   <ShieldCheck size={24} color="var(--primary)" style={{ marginBottom: '12px' }} />
++                   <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Life Cover</div>
++                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>@ Γé╣12 Lakhs</div>
++                 </div>
++                 <div className="card" style={{ padding: '16px', textAlign: 'center', border: 'none', background: '#fff' }}>
++                   <CreditCard size={24} color="var(--primary)" style={{ marginBottom: '12px' }} />
++                   <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Premium waiver</div>
++                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>up to Γé╣1.19 Lakh</div>
++                 </div>
++                 <div className="card" style={{ padding: '16px', textAlign: 'center', border: 'none', background: '#fff' }}>
++                   <CalendarClock size={24} color="var(--primary)" style={{ marginBottom: '12px' }} />
++                   <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Weekly income</div>
++                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>up to Γé╣8,000</div>
++                 </div>
++               </div>
++               <button className="btn" style={{ color: 'var(--primary)', background: 'transparent', padding: '12px 0', fontSize: '0.9rem', fontWeight: 600 }}>View all benefits &gt;</button>
++             </div>
++           </div>
++ 
++           {/* Right Side: Calculator Form */}
++           <div className="card" style={{ background: 'white', border: 'none', boxShadow: '0 8px 32px rgba(0,0,0,0.08)', padding: '0', borderRadius: '20px' }}>
++             <div style={{ background: '#003366', color: 'white', padding: '12px 24px', borderRadius: '20px 20px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
++               <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>AEGIS calculator</span>
++               <span style={{ fontSize: '0.8rem' }}>Starts at just Γé╣25 p.w</span>
++             </div>
++ 
++             <form onSubmit={handleOnboardingSubmit} style={{ padding: '32px' }}>
++               <h3 style={{ marginBottom: '24px', fontSize: '1.2rem' }}>Aegis Shield Plan calculator</h3>
++ 
++               <div className="input-group">
++                 <label className="input-label">Full Name</label>
++                 <input type="text" className="input-field" placeholder="E.g., Rahul Kumar" required value={riderInfo.name} onChange={e => setRiderInfo({ ...riderInfo, name: e.target.value })} />
++               </div>
++ 
++               <div className="input-group">
++                 <label className="input-label">Gender</label>
++                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
++                   {['Male', 'Female', 'Other'].map(g => (
++                     <button
++                       key={g}
++                       type="button"
++                       onClick={() => setRiderInfo({ ...riderInfo, gender: g })}
++                       style={{
++                         padding: '10px',
++                         borderRadius: '8px',
++                         border: '1px solid',
++                         borderColor: riderInfo.gender === g ? 'var(--primary)' : '#e2e8f0',
++                         background: riderInfo.gender === g ? 'var(--primary)' : 'white',
++                         color: riderInfo.gender === g ? 'white' : 'var(--text-main)',
++                         cursor: 'pointer',
++                         fontWeight: riderInfo.gender === g ? 600 : 400,
++                         fontSize: '0.9rem'
++                       }}
++                     >
++                       {g}
++                     </button>
++                   ))}
++                 </div>
++               </div>
++ 
++               <div className="grid-2">
++                 <div className="input-group">
++                   <label className="input-label">Date of Birth</label>
++                   <input type="date" className="input-field" value={riderInfo.dob} onChange={e => setRiderInfo({ ...riderInfo, dob: e.target.value })} required />
++                 </div>
++                 <div className="input-group">
++                   <label className="input-label">Your Weekly Earning</label>
++                   <select className="input-field input-select" value={riderInfo.avgEarnings} onChange={e => setRiderInfo({ ...riderInfo, avgEarnings: Number(e.target.value) })}>
++                     <option value="1500">Γé╣1,500 - Γé╣3,000</option>
++                     <option value="3000">Γé╣3,000 - Γé╣5,000</option>
++                     <option value="5000">Γé╣5,000 - Γé╣8,000</option>
++                     <option value="8000">Γé╣8,000+</option>
++                   </select>
++                 </div>
++               </div>
++ 
++               <div className="grid-2">
++                 <div className="input-group">
++                   <label className="input-label">Mobile Number</label>
++                   <input type="tel" className="input-field" placeholder="10 digit mobile number" maxLength="10" minLength="10" pattern="[0-9]{10}" value={riderInfo.mobile} onChange={e => setRiderInfo({ ...riderInfo, mobile: e.target.value })} required />
++                 </div>
++                 <div className="input-group">
++                   <label className="input-label">Your Email ID</label>
++                   <input type="email" className="input-field" placeholder="Enter Your Email Id" value={riderInfo.email} onChange={e => setRiderInfo({ ...riderInfo, email: e.target.value })} />
++                 </div>
++               </div>
++ 
++               <div className="grid-2">
++                 <div className="input-group">
++                   <label className="input-label">Operating City</label>
++                   <select className="input-field input-select" value={riderInfo.city} onChange={e => setRiderInfo({ ...riderInfo, city: e.target.value })}>
++                     <option value="Mumbai">Mumbai</option>
++                     <option value="Delhi">Delhi</option>
++                     <option value="Bangalore">Bangalore</option>
++                     <option value="Hyderabad">Hyderabad</option>
++                   </select>
++                 </div>
++                 <div className="input-group">
++                   <label className="input-label">Platform Partner</label>
++                   <select className="input-field input-select" value={riderInfo.platform} onChange={e => setRiderInfo({ ...riderInfo, platform: e.target.value })}>
++                     <option value="Zomato">Zomato</option>
++                     <option value="Swiggy">Swiggy</option>
++                     <option value="Zepto">Zepto</option>
++                     <option value="Blinkit">Blinkit</option>
++                   </select>
++                 </div>
++               </div>
++ 
++               <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', margin: '16px 0' }}>
++                 <input type="checkbox" checked readOnly style={{ marginTop: '4px' }} />
++                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
++                   By submitting my details, I authorize Aegis Security and its representatives to contact me. I further consent to permit Aegis to process and share my information with third parties for risk assessment. <span style={{ color: 'var(--primary)' }}>View More</span>
++                 </p>
++               </div>
++ 
++               <button type="submit" className="btn" style={{ width: '100%', background: 'var(--primary)', color: 'white', padding: '16px', borderRadius: '12px', fontSize: '1.1rem', fontWeight: 600, boxShadow: '0 4px 14px var(--glow-primary)' }}>
++                 Let's Calculate Protection
++               </button>
++             </form>
++           </div>
++         </div>
++       </div>
++     </div>
+++>>>>>>> origin/main
+    );
+  
+    const renderRiderDashboard = () => {

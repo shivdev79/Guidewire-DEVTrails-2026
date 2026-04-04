@@ -41,3 +41,14 @@ class Claim(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     fraud_score = Column(Float, nullable=True)
     rejection_reason = Column(String, nullable=True)
+
+
+class WalletLedger(Base):
+    __tablename__ = "wallet_ledger"
+
+    id = Column(Integer, primary_key=True, index=True)
+    worker_id = Column(Integer, index=True)
+    amount = Column(Float)
+    description = Column(String)
+    txn_type = Column(String)  # CREDIT | DEBIT
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
