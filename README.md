@@ -12,7 +12,7 @@
 ## 📑 Executive Summary
 India's gig economy operates on razor-thin margins. When external disruptions (monsoons, extreme heat, civic strikes, or platform crashes) occur, workers lose a massive percentage of their weekly income. Traditional insurance fails here due to **Basis Risk** (paying out when no local loss occurred), **Adverse Selection** (fraud rings), and **The Sunk-Cost Fallacy** (workers cancelling policies because they feel cheated if the weather remains clear).
 
-**Aura Guard** solves all three. We are not just building an insurance product; we are building a **High-Yield Resilience Asset**. By combining Guidewire's enterprise Cloud APIs with a hyper-local AI fraud engine and a gamified "Resilience Wallet," we mathematically align the worker's financial success with our platform's profitability.
+**AEGIS** solves all three. We are not just building an insurance product; we are building a **High-Yield Resilience Asset**. By combining Guidewire's enterprise Cloud APIs with a hyper-local AI fraud engine and a gamified "Resilience Wallet," we mathematically align the worker's financial success with our platform's profitability.
 
 <img width="975" height="759" alt="image" src="https://github.com/user-attachments/assets/224d9273-17a7-4829-96c4-a435597c1447" />
 
@@ -48,7 +48,7 @@ We must never penalize an honest delivery partner who loses cell signal during a
 
 ## 💎 The Actuarial Engine: A "God-Level" Fintech Ecosystem
 
-The biggest flaw in gig-worker insurance is psychological: workers hate paying for something they don't use. Aura Guard transforms the weekly premium from a *sunk cost* into a **wealth-building asset** using 4 behavioral pillars:
+The biggest flaw in gig-worker insurance is psychological: workers hate paying for something they don't use. AEGIS transforms the weekly premium from a *sunk cost* into a **wealth-building asset** using 4 behavioral pillars:
 
 1. **The "Resilience Wallet" (Micro-Savings):** A portion of every premium funds the worker's personal "Resilience Wallet." If a worker maintains a claim-free streak, their accumulated wallet balance automatically pays for their next premium, unlocking a **"Free Coverage Week."**
 2. **The Predictive "Risk Rebate":** If our AI overprices the weekly risk on Sunday (e.g., predicting a severe storm), but the storm misses the city by Wednesday, we issue an **instant partial rebate** directly back to the worker's UPI. 
