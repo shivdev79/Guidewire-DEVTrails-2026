@@ -9,7 +9,7 @@ import {
   Smartphone, Server, ShieldCheck, ActivitySquare, Terminal, Banknote, Wallet, AlertTriangle
 } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8000`;
 
 export default function ControlCenter({ setCurrentView, adminLogs = [], engineStates = {}, parametricTriggerResult = null, setParametricTriggerResult = () => {}, parametricCity = 'Mumbai', setParametricCity = () => {}, parametricTriggerLoading = false, handleParametricRainTrigger = () => {}, handleParametricHeatTrigger = () => {}, handleParametricStrikeTrigger = () => {} }) {
   const [activeTab, setActiveTab] = useState('overview');

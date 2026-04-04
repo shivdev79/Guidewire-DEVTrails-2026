@@ -464,14 +464,17 @@ export default function App() {
   const handleParametricRainTrigger = async () => {
     setParametricTriggerLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/demo/parametric/heavy-rain-location`, {
-        city: parametricCity,
-        rainfall_mm: 65
+      const response = await axios.post(`${API_BASE_URL}/admin/trigger-event`, {
+        location: parametricCity,
+        trigger_type: 'HEAVY_RAIN_' + parametricCity.toUpperCase(),
+        description: '🌧️ Heavy rainfall >15mm/hour detected - Parametric payout triggered'
       });
       setParametricTriggerResult(response.data);
+      // Show success toast
+      alert(`✅ ${response.data.workers_affected} workers affected in ${parametricCity}\n💰 Total Payout: ₹${response.data.total_payout.toLocaleString()}\n📋 Claims Created: ${response.data.claims_created}`);
     } catch (error) {
       console.error('Parametric trigger failed:', error);
-      alert('Trigger failed: ' + error.message);
+      alert('❌ Trigger failed: ' + (error.response?.data?.detail || error.message));
     }
     setParametricTriggerLoading(false);
   };
@@ -479,14 +482,17 @@ export default function App() {
   const handleParametricHeatTrigger = async () => {
     setParametricTriggerLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/demo/parametric/extreme-heat-location`, {
-        city: parametricCity,
-        temperature_c: 47
+      const response = await axios.post(`${API_BASE_URL}/admin/trigger-event`, {
+        location: parametricCity,
+        trigger_type: 'EXTREME_HEAT_' + parametricCity.toUpperCase(),
+        description: '🔥 Extreme heat >42°C detected - Parametric payout triggered'
       });
       setParametricTriggerResult(response.data);
+      // Show success toast
+      alert(`✅ ${response.data.workers_affected} workers affected in ${parametricCity}\n💰 Total Payout: ₹${response.data.total_payout.toLocaleString()}\n📋 Claims Created: ${response.data.claims_created}`);
     } catch (error) {
       console.error('Parametric trigger failed:', error);
-      alert('Trigger failed: ' + error.message);
+      alert('❌ Trigger failed: ' + (error.response?.data?.detail || error.message));
     }
     setParametricTriggerLoading(false);
   };
@@ -494,13 +500,17 @@ export default function App() {
   const handleParametricStrikeTrigger = async () => {
     setParametricTriggerLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/demo/parametric/civic-strike-location`, {
-        city: parametricCity
+      const response = await axios.post(`${API_BASE_URL}/admin/trigger-event`, {
+        location: parametricCity,
+        trigger_type: 'CIVIC_STRIKE_' + parametricCity.toUpperCase(),
+        description: '🚨 Civic strike/curfew declared - All workers income disrupted - Parametric payout triggered'
       });
       setParametricTriggerResult(response.data);
+      // Show success toast
+      alert(`✅ ${response.data.workers_affected} workers affected in ${parametricCity}\n💰 Total Payout: ₹${response.data.total_payout.toLocaleString()}\n📋 Claims Created: ${response.data.claims_created}`);
     } catch (error) {
       console.error('Parametric trigger failed:', error);
-      alert('Trigger failed: ' + error.message);
+      alert('❌ Trigger failed: ' + (error.response?.data?.detail || error.message));
     }
     setParametricTriggerLoading(false);
   };

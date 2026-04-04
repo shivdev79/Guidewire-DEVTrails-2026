@@ -7,7 +7,7 @@ import logging
 import models
 import schemas
 import config
-from database import engine, get_db
+from database import engine, get_db, SessionLocal
 from premium_engine import PremiumEngine
 from demo_mode import DemoModeController, DemoScenario
 
@@ -68,7 +68,7 @@ def create_policy(policy: schemas.PolicyCreate, db: Session = Depends(get_db)):
         
     if not policy.accepted_terms:
         raise HTTPException(status_code=400, detail="Must explicitly accept strict T&C to activate policy.")
-    
+
     worker.terms_accepted_at = datetime.datetime.utcnow()
     
     active_policy = db.query(models.Policy).filter(
@@ -86,6 +86,14 @@ def create_policy(policy: schemas.PolicyCreate, db: Session = Depends(get_db)):
 
     if wallet_credit > 0:
         worker.wallet_balance -= wallet_credit
+        # Add premium debit to ledger
+        ledger_debit = models.WalletLedger(
+            worker_id=worker.id,
+            amount=wallet_credit,
+            description=f"Premium debit ({policy.tier} plan)",
+            txn_type="DEBIT"
+        )
+        db.add(ledger_debit)
 
     week_start = datetime.datetime.utcnow()
     week_end = week_start + datetime.timedelta(days=7)
@@ -100,9 +108,19 @@ def create_policy(policy: schemas.PolicyCreate, db: Session = Depends(get_db)):
         status="ACTIVE"
     )
     
-    db.add(new_policy)
-    worker.wallet_balance += (premium_paid * 0.2)
+    cashback_amount = premium_paid * 0.2
+    worker.wallet_balance += cashback_amount
     
+    # Add cashback credit to ledger
+    ledger_credit = models.WalletLedger(
+        worker_id=worker.id,
+        amount=cashback_amount,
+        description="Cashback credit (20% on premium)",
+        txn_type="CREDIT"
+    )
+    db.add(ledger_credit)
+    
+    db.add(new_policy)
     db.commit()
     db.refresh(new_policy)
     return new_policy
@@ -140,6 +158,16 @@ def wallet_top_up(request: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Worker not found")
     
     worker.wallet_balance += float(amount)
+    
+    # Add to wallet ledger
+    ledger_entry = models.WalletLedger(
+        worker_id=worker_id,
+        amount=amount,
+        description=f"Wallet top-up ({source})",
+        txn_type="CREDIT"
+    )
+    db.add(ledger_entry)
+    
     db.commit()
     db.refresh(worker)
     
@@ -186,10 +214,24 @@ def get_admin_ledger(db: Session = Depends(get_db)):
     total_liquidity = sum(p.coverage_amount for p in policies if p.status == "ACTIVE")
     total_paid = sum(c.payout_amount for c in claims if c.status == "APPROVED")
     
+    # Serialize workers to avoid serialization issues
+    worker_list = [
+        {
+            "id": w.id,
+            "name": w.name,
+            "city": w.city,
+            "avg_weekly_earnings": w.avg_weekly_earnings,
+            "wallet_balance": w.wallet_balance,
+            "r_score": w.r_score
+        }
+        for w in workers
+    ]
+    
     return {
-        "workers": workers,
-        "policies": policies,
-        "claims": claims,
+        "workers": worker_list,
+        "total_workers": len(workers),
+        "total_policies": len(policies),
+        "total_claims": len(claims),
         "metrics": {
             "total_liquidity_exposure": total_liquidity,
             "total_claims_paid": total_paid,
@@ -443,6 +485,7 @@ def get_dashboard(worker_id: int, db: Session = Depends(get_db)):
         
     policies = db.query(models.Policy).filter(models.Policy.worker_id == worker_id).order_by(models.Policy.id.desc()).all()
     claims = db.query(models.Claim).filter(models.Claim.worker_id == worker_id).order_by(models.Claim.id.desc()).all()
+    wallet_ledger = db.query(models.WalletLedger).filter(models.WalletLedger.worker_id == worker_id).order_by(models.WalletLedger.id.desc()).all()
     
     active_policy = next((p for p in policies if p.status == "ACTIVE"), None)
     past_policies = [p for p in policies if p.status != "ACTIVE"]
@@ -452,6 +495,7 @@ def get_dashboard(worker_id: int, db: Session = Depends(get_db)):
         "active_policy": active_policy,
         "past_policies": past_policies,
         "claims": claims,
+        "wallet_ledger": wallet_ledger,
         "system_status": {
             "circuit_breaker_active": config.CIRCUIT_BREAKER_ACTIVE,
             "demo_mode_active": DemoModeController.get_active_scenario() is not None
@@ -1245,6 +1289,158 @@ def get_mock_metrics():
         "fraud_alerts": MockDataGenerator.generate_fraud_alerts(),
         "weather_events": MockDataGenerator.generate_weather_events(count=15)
     }
+
+# ==================== TRIGGER ENGINE - MASS CLAIM CREATION ====================
+
+@app.post("/admin/trigger-event")
+def trigger_parametric_event(request: dict, db: Session = Depends(get_db)):
+    """
+    Trigger parametric insurance event affecting all workers in a location
+    
+    Request:
+    {
+        "location": "Mumbai",
+        "trigger_type": "HEAVY_RAIN_MUMBAI",
+        "description": "Heavy rainfall >15mm/hour"
+    }
+    """
+    try:
+        location = request.get("location", "").strip()
+        trigger_type = request.get("trigger_type", "").strip()
+        description = request.get("description", "")
+        
+        if not location or not trigger_type:
+            raise HTTPException(status_code=400, detail="location and trigger_type required")
+        
+        # Find all workers with active policies in this location
+        workers_in_location = db.query(models.Worker).filter(
+            models.Worker.city == location
+        ).all()
+        
+        # Filter for those with active policies
+        affected_workers = []
+        created_claims = []
+        total_payout = 0
+        
+        for worker in workers_in_location:
+            active_policy = db.query(models.Policy).filter(
+                models.Policy.worker_id == worker.id,
+                models.Policy.status == "ACTIVE"
+            ).first()
+            
+            if not active_policy:
+                continue
+            
+            affected_workers.append({
+                "id": worker.id,
+                "name": worker.name,
+                "city": worker.city,
+                "earnings": worker.avg_weekly_earnings
+            })
+            
+            # Calculate payout based on earnings
+            import random
+            payout = worker.avg_weekly_earnings * random.uniform(0.3, 0.8)
+            payout = round(payout, 2)
+            
+            # Create claim
+            claim = models.Claim(
+                worker_id=worker.id,
+                trigger_type=trigger_type,
+                description=f"{description} - Automatic parametric payout",
+                status="APPROVED",
+                payout_amount=payout,
+                fraud_score=round(random.uniform(0.01, 0.25), 2),
+                created_at=datetime.datetime.utcnow()
+            )
+            
+            db.add(claim)
+            db.flush()
+            
+            # Update wallet balance
+            worker.wallet_balance += payout
+            
+            # Add wallet ledger entry
+            ledger = models.WalletLedger(
+                worker_id=worker.id,
+                amount=payout,
+                description=f"Parametric claim - {trigger_type}",
+                txn_type="CREDIT",
+                created_at=datetime.datetime.utcnow()
+            )
+            db.add(ledger)
+            
+            created_claims.append({
+                "claim_id": claim.id,
+                "worker_id": worker.id,
+                "worker_name": worker.name,
+                "amount": payout,
+                "status": "APPROVED"
+            })
+            
+            total_payout += payout
+        
+        db.commit()
+        
+        logger.info(f"🎯 TRIGGER EVENT: {trigger_type} in {location} affected {len(affected_workers)} workers, total payout: ₹{total_payout}")
+        
+        return {
+            "status": "SUCCESS",
+            "message": f"🎯 {trigger_type} triggered in {location}",
+            "location": location,
+            "trigger_type": trigger_type,
+            "workers_affected": len(affected_workers),
+            "total_payout": round(total_payout, 2),
+            "average_payout": round(total_payout / max(len(affected_workers), 1), 2) if affected_workers else 0,
+            "affected_workers": affected_workers[:10],  # Show first 10
+            "claims_created": len(created_claims),
+            "details": {
+                "total_claims_created": len(created_claims),
+                "all_claims": created_claims
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Trigger event failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/available-triggers")
+def get_available_triggers():
+    """Get list of available trigger events and locations"""
+    db = SessionLocal()
+    
+    try:
+        # Get unique cities
+        cities = db.query(models.Worker.city).distinct().all()
+        city_list = [c[0] for c in cities]
+        
+        trigger_types = [
+            "HEAVY_RAIN_MUMBAI",
+            "EXTREME_HEAT_BANGALORE",
+            "CIVIC_STRIKE_DELHI",
+            "HEAT_WAVE_PUNE",
+            "FLOOD_EVENT_HYDERABAD",
+            "SMOG_EVENT_DELHI",
+            "PLATFORM_OUTAGE_ZOMATO",
+            "TRAFFIC_GRIDLOCK_BANGALORE"
+        ]
+        
+        return {
+            "available_locations": city_list,
+            "available_triggers": trigger_types,
+            "trigger_descriptions": {
+                "HEAVY_RAIN_MUMBAI": "🌧️ Heavy Rainfall >15mm/hour",
+                "EXTREME_HEAT_BANGALORE": "🔥 Extreme Heat >42°C",
+                "CIVIC_STRIKE_DELHI": "🚨 Civic Strike/Curfew",
+                "HEAT_WAVE_PUNE": "☀️ Heat Wave Event",
+                "FLOOD_EVENT_HYDERABAD": "🌊 Flood/Waterlogging",
+                "SMOG_EVENT_DELHI": "💨 Air Quality Crisis (AQI >250)",
+                "PLATFORM_OUTAGE_ZOMATO": "⚠️ Platform Service Outage",
+                "TRAFFIC_GRIDLOCK_BANGALORE": "🚗 Traffic Gridlock"
+            }
+        }
+    finally:
+        db.close()
 
 # ==================== STARTUP & SHUTDOWN ====================
 
