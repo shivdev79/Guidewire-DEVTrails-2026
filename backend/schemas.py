@@ -22,6 +22,7 @@ class WorkerResponse(WorkerCreate):
 class PolicyCreate(BaseModel):
     worker_id: int
     tier: str
+    accepted_terms: bool
 
 class PolicyResponse(BaseModel):
     id: int
@@ -51,3 +52,9 @@ class ClaimResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ManualClaimCreate(BaseModel):
+    worker_id: int
+    reason: str
+    description: str
+    amount: float
