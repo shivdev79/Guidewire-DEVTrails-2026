@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, CheckCircle2, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase } from 'lucide-react';
-import RegistrationFlow from './RegistrationFlow';
 import ControlCenter from './ControlCenter';
 
 const API_BASE_URL = 'http://localhost:8000';
@@ -184,12 +183,17 @@ export default function App() {
   const [calculatedPremium, setCalculatedPremium] = useState(0);
   
   const [claims, setClaims] = useState([]);
+  const [expandedClaimId, setExpandedClaimId] = useState(null);
   const [riderTab, setRiderTab] = useState('overview');
   const [adminTab, setAdminTab] = useState('overview');
   const [manualClaim, setManualClaim] = useState({ reason: 'Rain', description: '', amount: '' });
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [activatedPlan, setActivatedPlan] = useState(null);
+  const [demoTriggerLoading, setDemoTriggerLoading] = useState(false);
   const [showPricingBreakdown, setShowPricingBreakdown] = useState(null); // policy.id or null
+  const [parametricTriggerResult, setParametricTriggerResult] = useState(null);
+  const [parametricCity, setParametricCity] = useState('Mumbai');
+  const [parametricTriggerLoading, setParametricTriggerLoading] = useState(false);
 
   const handleManualClaimSubmit = (e) => {
     e.preventDefault();
@@ -202,6 +206,51 @@ export default function App() {
     }, ...prev]);
     setManualClaim({ reason: 'Rain', description: '', amount: '' });
     setRiderTab('overview');
+  };
+
+  // Parametric Trigger Handlers (Location-Based Automatic Claims)
+  const handleParametricRainTrigger = async () => {
+    setParametricTriggerLoading(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/demo/parametric/heavy-rain-location`, {
+        city: parametricCity,
+        rainfall_mm: 65
+      });
+      setParametricTriggerResult(response.data);
+    } catch (error) {
+      console.error('Parametric trigger failed:', error);
+      alert('Trigger failed: ' + error.message);
+    }
+    setParametricTriggerLoading(false);
+  };
+
+  const handleParametricHeatTrigger = async () => {
+    setParametricTriggerLoading(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/demo/parametric/extreme-heat-location`, {
+        city: parametricCity,
+        temperature_c: 47
+      });
+      setParametricTriggerResult(response.data);
+    } catch (error) {
+      console.error('Parametric trigger failed:', error);
+      alert('Trigger failed: ' + error.message);
+    }
+    setParametricTriggerLoading(false);
+  };
+
+  const handleParametricStrikeTrigger = async () => {
+    setParametricTriggerLoading(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/demo/parametric/civic-strike-location`, {
+        city: parametricCity
+      });
+      setParametricTriggerResult(response.data);
+    } catch (error) {
+      console.error('Parametric trigger failed:', error);
+      alert('Trigger failed: ' + error.message);
+    }
+    setParametricTriggerLoading(false);
   };
 
   // Global condition simulator
@@ -255,6 +304,8 @@ export default function App() {
               status: c.status === 'APPROVED' ? 'Approved (Instant API)' : c.status
             }));
             setClaims(formattedClaims);
+          } else {
+            setClaims([]);
           }
         } catch (e) {
           console.error("Dashboard error", e);
@@ -308,6 +359,44 @@ export default function App() {
        setHasActivePolicy(true);
     } catch (e) {
        console.error("Failed to create policy", e);
+    }
+  };
+
+  // Instant demo trigger for worker dashboard
+  const triggerInstantDemo = async (triggerType) => {
+    if (!workerId) {
+      alert('Please authenticate first');
+      return;
+    }
+    try {
+      setDemoTriggerLoading(true);
+      let endpoint = '';
+      switch(triggerType) {
+        case 'rain': endpoint = `/demo/trigger-heavy-rain/${workerId}`; break;
+        case 'heat': endpoint = `/demo/trigger-extreme-heat/${workerId}`; break;
+        case 'strike': endpoint = `/demo/trigger-civic-strike/${workerId}`; break;
+        default: endpoint = `/demo/trigger-heavy-rain/${workerId}`;
+      }
+      const res = await axios.post(`${API_BASE_URL}${endpoint}`);
+      // Refresh dashboard immediately
+      const dashRes = await axios.get(`${API_BASE_URL}/worker/${workerId}/dashboard`);
+      const data = dashRes.data;
+      if (data.claims && data.claims.length > 0) {
+        const formattedClaims = data.claims.map(c => ({
+          id: 'CLM-' + c.id,
+          date: new Date(c.created_at).toLocaleDateString(),
+          reason: c.trigger_type,
+          amount: c.payout_amount,
+          status: c.status === 'APPROVED' ? 'Approved (Instant API)' : c.status
+        }));
+        setClaims(formattedClaims);
+      }
+      alert(`✅ Claim created! Payout: ₹${res.data.claim.payout_amount}`);
+    } catch (e) {
+      console.error("Demo trigger failed:", e);
+      alert(`Error: ${e.response?.data?.detail || e.message}`);
+    } finally {
+      setDemoTriggerLoading(false);
     }
   };
 
@@ -490,7 +579,7 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <input type='email' placeholder='Email Address' style={{ padding: '18px 20px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', color: '#fff', fontSize: '1rem', outline: 'none', transition: 'all 0.3s' }} value={riderInfo.email || ''} onChange={e => setRiderInfo({...riderInfo, email: e.target.value})} onFocus={(e) => e.target.style.borderColor = 'rgba(255,199,44,0.5)'} onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
                   <input type='password' placeholder='Password' style={{ padding: '18px 20px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', color: '#fff', fontSize: '1rem', outline: 'none', transition: 'all 0.3s' }} value={riderInfo.password || ''} onChange={e => setRiderInfo({...riderInfo, password: e.target.value})} onFocus={(e) => e.target.style.borderColor = 'rgba(255,199,44,0.5)'} onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
-                  <motion.button whileHover={{ scale: 1.02, boxShadow: '0 15px 30px rgba(245, 158, 11, 0.4)' }} whileTap={{ scale: 0.98 }} onClick={() => { setWorkerId(1); setCurrentView('rider-dash'); }} style={{ padding: '18px', background: 'linear-gradient(135deg, #FFC72C, #F59E0B)', color: '#0f172a', border: 'none', borderRadius: '20px', fontWeight: 800, fontSize: '1.05rem', cursor: 'pointer', marginTop: '12px', boxShadow: '0 10px 25px rgba(245, 158, 11, 0.2)' }}>Authenticate</motion.button>
+                  <motion.button whileHover={{ scale: 1.02, boxShadow: '0 15px 30px rgba(245, 158, 11, 0.4)' }} whileTap={{ scale: 0.98 }} onClick={() => { setWorkerId(174); setCurrentView('rider-dash'); setClaims([]); }} style={{ padding: '18px', background: 'linear-gradient(135deg, #FFC72C, #F59E0B)', color: '#0f172a', border: 'none', borderRadius: '20px', fontWeight: 800, fontSize: '1.05rem', cursor: 'pointer', marginTop: '12px', boxShadow: '0 10px 25px rgba(245, 158, 11, 0.2)' }}>Authenticate as Worker 174</motion.button>
                 </div>
 
                 <div style={{ marginTop: '36px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -827,15 +916,190 @@ export default function App() {
 );
 
   const renderOnboarding = () => (
-    <RegistrationFlow 
-      riderInfo={riderInfo}
-      setRiderInfo={setRiderInfo}
-      setWorkerId={setWorkerId}
-      setCurrentView={setCurrentView}
-      setCalculatedPremium={setCalculatedPremium}
-      setCoverageAmount={setCoverageAmount}
-      setRScore={setRScore}
-    />
+    <div style={{ background: '#f8f9fa', minHeight: '100vh', padding: '40px 20px' }}>
+      <div className="container" style={{ maxWidth: '1200px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>
+            <Shield size={24} color="var(--primary)" /> AEGIS <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>| SECURE TRAILS</span>
+          </div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+            AI-Powered Parametric Protection for Gig Economy Partners
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '40px' }}>
+          {/* Left Side: Value Proposition */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+            {/* Main Feature Card */}
+            <div className="card" style={{ background: 'white', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
+                <div style={{ position: 'relative', width: '200px', height: '120px', background: '#e2e8f0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: '40px', height: '40px', background: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
+                    <Activity size={20} fill="#ef4444" />
+                  </div>
+                  <div style={{ position: 'absolute', bottom: '12px', left: '12px', background: 'var(--accent-red)', color: 'white', fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px' }}>LIVE FEED</div>
+                </div>
+                <div>
+                  <h3 style={{ color: 'var(--accent-red)', fontSize: '1.1rem', marginBottom: '4px' }}>Signature Assure Shield</h3>
+                  <h2 style={{ fontSize: '1.8rem', marginBottom: '16px' }}>Protect Income with <br />Goal Assurance</h2>
+                </div>
+              </div>
+            </div>
+
+            {/* Pay/Get Card */}
+            <div className="card" style={{ background: 'white', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '32px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <img src="https://img.icons8.com/bubbles/100/000000/user-male.png" alt="Rider" style={{ width: '80px' }} />
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>Pay</span>
+                    <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--primary)' }}>₹40 p.w</span>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>for active protection</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>Get</span>
+                    <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-green)' }}>₹1,500*</span>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>instant payout @disruption</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Tax/Benefit Bar */}
+            <div style={{ background: 'rgba(0, 115, 152, 0.05)', padding: '12px 20px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px dashed var(--primary)' }}>
+              <Wallet size={20} color="var(--primary)" />
+              <span style={{ fontSize: '0.9rem', color: 'var(--primary)' }}>Get tax & platform benefits on premium paid u/s 80C & platform incentives</span>
+            </div>
+
+            {/* Benefits Section */}
+            <div>
+              <h3 style={{ marginBottom: '20px', fontWeight: 500 }}>Smart benefits for your family in your absence</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                <div className="card" style={{ padding: '16px', textAlign: 'center', border: 'none', background: '#fff' }}>
+                  <ShieldCheck size={24} color="var(--primary)" style={{ marginBottom: '12px' }} />
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Life Cover</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>@ ₹12 Lakhs</div>
+                </div>
+                <div className="card" style={{ padding: '16px', textAlign: 'center', border: 'none', background: '#fff' }}>
+                  <CreditCard size={24} color="var(--primary)" style={{ marginBottom: '12px' }} />
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Premium waiver</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>up to ₹1.19 Lakh</div>
+                </div>
+                <div className="card" style={{ padding: '16px', textAlign: 'center', border: 'none', background: '#fff' }}>
+                  <CalendarClock size={24} color="var(--primary)" style={{ marginBottom: '12px' }} />
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Weekly income</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>up to ₹8,000</div>
+                </div>
+              </div>
+              <button className="btn" style={{ color: 'var(--primary)', background: 'transparent', padding: '12px 0', fontSize: '0.9rem', fontWeight: 600 }}>View all benefits &gt;</button>
+            </div>
+          </div>
+
+          {/* Right Side: Calculator Form */}
+          <div className="card" style={{ background: 'white', border: 'none', boxShadow: '0 8px 32px rgba(0,0,0,0.08)', padding: '0', borderRadius: '20px' }}>
+            <div style={{ background: '#003366', color: 'white', padding: '12px 24px', borderRadius: '20px 20px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>AEGIS calculator</span>
+              <span style={{ fontSize: '0.8rem' }}>Starts at just ₹25 p.w</span>
+            </div>
+
+            <form onSubmit={handleOnboardingSubmit} style={{ padding: '32px' }}>
+              <h3 style={{ marginBottom: '24px', fontSize: '1.2rem' }}>Aegis Shield Plan calculator</h3>
+
+              <div className="input-group">
+                <label className="input-label">Full Name</label>
+                <input type="text" className="input-field" placeholder="E.g., Rahul Kumar" required value={riderInfo.name} onChange={e => setRiderInfo({ ...riderInfo, name: e.target.value })} />
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Gender</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                  {['Male', 'Female', 'Other'].map(g => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setRiderInfo({ ...riderInfo, gender: g })}
+                      style={{
+                        padding: '10px',
+                        borderRadius: '8px',
+                        border: '1px solid',
+                        borderColor: riderInfo.gender === g ? 'var(--primary)' : '#e2e8f0',
+                        background: riderInfo.gender === g ? 'var(--primary)' : 'white',
+                        color: riderInfo.gender === g ? 'white' : 'var(--text-main)',
+                        cursor: 'pointer',
+                        fontWeight: riderInfo.gender === g ? 600 : 400,
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid-2">
+                <div className="input-group">
+                  <label className="input-label">Date of Birth</label>
+                  <input type="date" className="input-field" value={riderInfo.dob} onChange={e => setRiderInfo({ ...riderInfo, dob: e.target.value })} required />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Your Weekly Earning</label>
+                  <select className="input-field input-select" value={riderInfo.avgEarnings} onChange={e => setRiderInfo({ ...riderInfo, avgEarnings: Number(e.target.value) })}>
+                    <option value="1500">₹1,500 - ₹3,000</option>
+                    <option value="3000">₹3,000 - ₹5,000</option>
+                    <option value="5000">₹5,000 - ₹8,000</option>
+                    <option value="8000">₹8,000+</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid-2">
+                <div className="input-group">
+                  <label className="input-label">Mobile Number</label>
+                  <input type="tel" className="input-field" placeholder="10 digit mobile number" maxLength="10" minLength="10" pattern="[0-9]{10}" value={riderInfo.mobile} onChange={e => setRiderInfo({ ...riderInfo, mobile: e.target.value })} required />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Your Email ID</label>
+                  <input type="email" className="input-field" placeholder="Enter Your Email Id" value={riderInfo.email} onChange={e => setRiderInfo({ ...riderInfo, email: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="grid-2">
+                <div className="input-group">
+                  <label className="input-label">Operating City</label>
+                  <select className="input-field input-select" value={riderInfo.city} onChange={e => setRiderInfo({ ...riderInfo, city: e.target.value })}>
+                    <option value="Mumbai">Mumbai</option>
+                    <option value="Delhi">Delhi</option>
+                    <option value="Bangalore">Bangalore</option>
+                    <option value="Hyderabad">Hyderabad</option>
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Platform Partner</label>
+                  <select className="input-field input-select" value={riderInfo.platform} onChange={e => setRiderInfo({ ...riderInfo, platform: e.target.value })}>
+                    <option value="Zomato">Zomato</option>
+                    <option value="Swiggy">Swiggy</option>
+                    <option value="Zepto">Zepto</option>
+                    <option value="Blinkit">Blinkit</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', margin: '16px 0' }}>
+                <input type="checkbox" checked readOnly style={{ marginTop: '4px' }} />
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  By submitting my details, I authorize Aegis Security and its representatives to contact me. I further consent to permit Aegis to process and share my information with third parties for risk assessment. <span style={{ color: 'var(--primary)' }}>View More</span>
+                </p>
+              </div>
+
+              <button type="submit" className="btn" style={{ width: '100%', background: 'var(--primary)', color: 'white', padding: '16px', borderRadius: '12px', fontSize: '1.1rem', fontWeight: 600, boxShadow: '0 4px 14px var(--glow-primary)' }}>
+                Let's Calculate Protection
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 
   const renderRiderDashboard = () => {
@@ -872,36 +1136,35 @@ export default function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px' }}>
               <span style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--primary)' }}>Aegis Portal</span>
             </div>
-
             <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div className={`btn ${riderTab === 'overview' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'overview' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'overview' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'overview' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('overview')}>
+              <button type="button" className={`btn ${riderTab === 'overview' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'overview' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'overview' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'overview' ? 'none' : '1px solid transparent' }} onClick={() => { setRiderTab('overview'); document.querySelector('.main-content')?.scrollTo(0, 0); }}>
                 <Activity size={18} /> Overview
-              </div>
-              <div className={`btn ${riderTab === 'plan-advisor' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'plan-advisor' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'plan-advisor' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'plan-advisor' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('plan-advisor')}>
+              </button>
+              <button type="button" className={`btn ${riderTab === 'plan-advisor' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'plan-advisor' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'plan-advisor' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'plan-advisor' ? 'none' : '1px solid transparent' }} onClick={() => { setRiderTab('plan-advisor'); document.querySelector('.main-content')?.scrollTo(0, 0); }}>
                 <Lightbulb size={18} /> Plan Advisor
-              </div>
-              <div className={`btn ${riderTab === 'my-policy' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'my-policy' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'my-policy' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'my-policy' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('my-policy')}>
+              </button>
+              <button type="button" className={`btn ${riderTab === 'my-policy' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'my-policy' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'my-policy' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'my-policy' ? 'none' : '1px solid transparent' }} onClick={() => { setRiderTab('my-policy'); document.querySelector('.main-content')?.scrollTo(0, 0); }}>
                 <ShieldCheck size={18} /> My Policy
-              </div>
-              <div className={`btn ${riderTab === 'explore-plans' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'explore-plans' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'explore-plans' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'explore-plans' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('explore-plans')}>
+              </button>
+              <button type="button" className={`btn ${riderTab === 'explore-plans' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'explore-plans' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'explore-plans' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'explore-plans' ? 'none' : '1px solid transparent' }} onClick={() => { setRiderTab('explore-plans'); document.querySelector('.main-content')?.scrollTo(0, 0); }}>
                 <Sliders size={18} /> Explore Plans
-              </div>
-              <div className={`btn ${riderTab === 'file-claim' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'file-claim' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'file-claim' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'file-claim' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('file-claim')}>
+              </button>
+              <button type="button" className={`btn ${riderTab === 'file-claim' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'file-claim' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'file-claim' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'file-claim' ? 'none' : '1px solid transparent' }} onClick={() => { setRiderTab('file-claim'); document.querySelector('.main-content')?.scrollTo(0, 0); }}>
                 <ListPlus size={18} /> File a Claim
-              </div>
-              <div className={`btn ${riderTab === 'claim-history' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'claim-history' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'claim-history' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'claim-history' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('claim-history')}>
+              </button>
+              <button type="button" className={`btn ${riderTab === 'claim-history' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'claim-history' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'claim-history' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'claim-history' ? 'none' : '1px solid transparent' }} onClick={() => { setRiderTab('claim-history'); document.querySelector('.main-content')?.scrollTo(0, 0); }}>
                 <Clock size={18} /> Claim History
-              </div>
-              <div className={`btn ${riderTab === 'wallet' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'wallet' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'wallet' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'wallet' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('wallet')}>
+              </button>
+              <button type="button" className={`btn ${riderTab === 'wallet' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'wallet' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'wallet' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'wallet' ? 'none' : '1px solid transparent' }} onClick={() => { setRiderTab('wallet'); document.querySelector('.main-content')?.scrollTo(0, 0); }}>
                 <Wallet size={18} /> Wallet & Payouts
-              </div>
-              <div className={`btn ${riderTab === 'help' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'help' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'help' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'help' ? 'none' : '1px solid transparent' }} onClick={() => setRiderTab('help')}>
+              </button>
+              <button type="button" className={`btn ${riderTab === 'help' ? '' : 'btn-outline'}`} style={{ justifyContent: 'flex-start', color: riderTab === 'help' ? 'var(--primary)' : 'var(--text-main)', background: riderTab === 'help' ? 'rgba(0,115,152,0.1)' : 'transparent', border: riderTab === 'help' ? 'none' : '1px solid transparent' }} onClick={() => { setRiderTab('help'); document.querySelector('.main-content')?.scrollTo(0, 0); }}>
                 <HelpCircle size={18} /> Help & Support
-              </div>
+              </button>
               <div style={{ margin: '16px 0', borderTop: '1px solid var(--card-border)' }}></div>
-              <div className="btn btn-outline" style={{ justifyContent: 'flex-start', border: 'none', color: 'var(--accent-red)' }} onClick={() => setCurrentView('login')}>
+              <button type="button" className="btn btn-outline" style={{ justifyContent: 'flex-start', border: 'none', color: 'var(--accent-red)' }} onClick={() => { setCurrentView('login'); setRiderTab('overview'); }}>
                 <Search size={18} /> Log Out
-              </div>
+              </button>
             </nav>
           </aside>
 
@@ -1399,41 +1662,239 @@ export default function App() {
 
             {riderTab === 'claim-history' && (
               <>
+                <button onClick={() => setRiderTab('dashboard')} style={{ marginBottom: '16px', background: 'transparent', border: '1px solid var(--card-border)', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  ← Back to Dashboard
+                </button>
                 <header style={{ marginBottom: '32px' }}>
                   <h1 className="animate-slide-up">Claim History</h1>
                   <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Review your previously filed manual claims and automated logic traces.</p>
                 </header>
 
+                {/* Demo Trigger Buttons */}
+                {hasActivePolicy && (
+                  <div className="animate-slide-up delay-200" style={{ marginBottom: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
+                    <button 
+                      className="btn btn-primary"
+                      onClick={() => triggerInstantDemo('rain')}
+                      disabled={demoTriggerLoading}
+                      style={{ background: '#3b82f6', fontSize: '0.9rem' }}
+                    >
+                      {demoTriggerLoading ? '⏳' : '🌧️'} Trigger Rain
+                    </button>
+                    <button 
+                      className="btn btn-primary"
+                      onClick={() => triggerInstantDemo('heat')}
+                      disabled={demoTriggerLoading}
+                      style={{ background: '#f59e0b', fontSize: '0.9rem' }}
+                    >
+                      {demoTriggerLoading ? '⏳' : '🔥'} Trigger Heat
+                    </button>
+                    <button 
+                      className="btn btn-primary"
+                      onClick={() => triggerInstantDemo('strike')}
+                      disabled={demoTriggerLoading}
+                      style={{ background: '#ef4444', fontSize: '0.9rem' }}
+                    >
+                      {demoTriggerLoading ? '⏳' : '🚨'} Trigger Strike
+                    </button>
+                    <div style={{ padding: '12px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid #86efac', borderRadius: '8px', fontSize: '0.8rem', color: '#15803d', fontWeight: 600 }}>
+                      ✅ Click above to instantly create a claim
+                    </div>
+                  </div>
+                )}
+
                 <div className="animate-slide-up delay-200">
                   {claims.length === 0 ? (
-                    <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 20px', border: '1px dashed var(--card-border)' }}>
-                      <FileText size={32} style={{ margin: '0 auto 16px auto', opacity: 0.5 }} />
-                      <p>You have no claim history.</p>
+                    <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '60px 20px', border: '1px dashed var(--card-border)', background: 'rgba(0,0,0,0.02)' }}>
+                      <FileText size={48} style={{ margin: '0 auto 16px auto', opacity: 0.3 }} />
+                      <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>No Claims Yet</h3>
+                      <p style={{ fontSize: '0.9rem' }}>Click a demo trigger above to generate a parametric claim</p>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {claims.map(c => (
-                        <div key={c.id} className="card" style={{ borderLeft: c.status.includes('Pending') ? '4px solid var(--accent-orange)' : '4px solid var(--accent-green)', padding: '24px', margin: 0 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span className={`badge ${c.status.includes('Pending') ? 'badge-orange' : 'badge-green'}`}>
-                              {c.status}
-                            </span>
-                            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{c.date}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                              <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>{c.reason}</p>
-                              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>Reference Number: {c.id}</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      {/* PROFESSIONAL CLAIM ANALYSIS VIEW */}
+                      {claims.map((c, idx) => {
+                        const isExpanded = expandedClaimId === c.id;
+                        
+                        // Extract trigger type details
+                        const getTriggerDetails = (trigger) => {
+                          switch(trigger) {
+                            case 'Heavy Rain (>50mm/hr)':
+                              return {
+                                icon: '🌧️',
+                                threshold: '50mm/hr',
+                                actual: Math.round(45 + Math.random() * 30) + 'mm/hr',
+                                zone: 'Downtown Core',
+                                coordinates: '19.0760°N, 72.8777°E',
+                                riskLevel: 'High',
+                                color: '#3b82f6',
+                                factors: ['Rainfall intensity', 'Wind speed', 'Flood risk zone', 'Infrastructure damage potential']
+                              };
+                            case 'Extreme Heat (>44°C)':
+                              return {
+                                icon: '🔥',
+                                threshold: '44°C',
+                                actual: Math.round(42 + Math.random() * 8) + '°C',
+                                zone: 'North Suburbs',
+                                coordinates: '19.2183°N, 72.8479°E',
+                                riskLevel: 'Medium',
+                                color: '#f59e0b',
+                                factors: ['Temperature anomaly', 'Heat index', 'Humidity level', 'Health risk alert']
+                              };
+                            case 'Civic Strike/Curfew':
+                              return {
+                                icon: '🚨',
+                                threshold: 'Curfew Active',
+                                actual: 'Civic strike declared',
+                                zone: 'East Industrial',
+                                coordinates: '19.0123°N, 72.8456°E',
+                                riskLevel: 'Critical',
+                                color: '#ef4444',
+                                factors: ['Strike alert', 'Curfew hours', 'Transport disruption', 'Income loss probability']
+                              };
+                            default:
+                              return {
+                                icon: '📊',
+                                threshold: 'N/A',
+                                actual: 'N/A',
+                                zone: 'Unknown',
+                                coordinates: 'N/A',
+                                riskLevel: 'Unknown',
+                                color: '#6b7280',
+                                factors: []
+                              };
+                          }
+                        };
+                        
+                        const details = getTriggerDetails(c.reason);
+                        const fraudScore = Math.random() * 15; // Low fraud score for parametric
+                        const confidenceScore = 90 + Math.random() * 9;
+                        
+                        return (
+                          <div 
+                            key={c.id}
+                            onClick={() => setExpandedClaimId(isExpanded ? null : c.id)}
+                            style={{ 
+                              cursor: 'pointer',
+                              border: `2px solid ${details.color}`,
+                              borderRadius: '16px',
+                              overflow: 'hidden',
+                              background: 'var(--card-bg)',
+                              transition: 'all 0.3s ease',
+                              transform: isExpanded ? 'scale(1.02)' : 'scale(1)',
+                              boxShadow: isExpanded ? `0 20px 40px ${details.color}30` : 'none'
+                            }}
+                          >
+                            {/* CLAIM HEADER - Always Visible */}
+                            <div style={{ padding: '24px', background: `${details.color}10`, borderBottom: isExpanded ? `1px solid ${details.color}30` : 'none' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr 1fr', gap: '24px', alignItems: 'center' }}>
+                                {/* Claim ID & Status */}
+                                <div>
+                                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Claim ID</p>
+                                  <p style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-main)' }}>{c.id}</p>
+                                  <div style={{ marginTop: '8px', display: 'flex', gap: '4px' }}>
+                                    <span style={{ background: '#10b981', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600 }}>✓ APPROVED</span>
+                                    <span style={{ background: '#06b6d4', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600 }}>INSTANT</span>
+                                  </div>
+                                </div>
+                                
+                                {/* Trigger Details */}
+                                <div>
+                                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Parametric Trigger</p>
+                                  <p style={{ fontSize: '1.1rem', fontWeight: 700, color: details.color }}>{details.icon} {c.reason}</p>
+                                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>📍 {details.zone} | Threshold: {details.threshold}</p>
+                                </div>
+                                
+                                {/* Payout & Confidence */}
+                                <div style={{ textAlign: 'center' }}>
+                                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Payout</p>
+                                  <p style={{ fontSize: '1.5rem', fontWeight: 800, color: details.color }}>₹{c.amount}</p>
+                                  <p style={{ fontSize: '0.8rem', color: '#10b981', marginTop: '4px' }}>✓ Processed</p>
+                                </div>
+                                
+                                {/* Risk & Date */}
+                                <div style={{ textAlign: 'right' }}>
+                                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Risk Level</p>
+                                  <p style={{ fontSize: '1rem', fontWeight: 700, color: details.riskLevel === 'Critical' ? '#ef4444' : details.riskLevel === 'High' ? '#f59e0b' : '#10b981' }}>
+                                    {details.riskLevel === 'Critical' ? '🔴' : details.riskLevel === 'High' ? '🟠' : '🟢'} {details.riskLevel}
+                                  </p>
+                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>{c.date}</p>
+                                </div>
+                              </div>
                             </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <h3 style={{ color: c.status.includes('Pending') ? 'var(--text-main)' : 'var(--accent-green)', fontSize: '1.5rem' }}>₹{c.amount}</h3>
-                              {!c.status.includes('Pending') && (
-                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>Processed and Closed</div>
-                              )}
-                            </div>
+                            
+                            {/* EXPANDED DETAILS - Parametric Analysis */}
+                            {isExpanded && (
+                              <div style={{ padding: '24px', borderTop: `1px solid ${details.color}30`, background: 'var(--card-bg)' }}>
+                                {/* Parametric Analysis Metrics */}
+                                <div style={{ marginBottom: '24px' }}>
+                                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', marginBottom: '12px' }}>⚙️ Parametric Analysis</h4>
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                                    <div style={{ background: 'rgba(59,130,246,0.1)', padding: '12px', borderRadius: '8px', border: `1px solid ${details.color}20` }}>
+                                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Threshold</p>
+                                      <p style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>{details.threshold}</p>
+                                    </div>
+                                    <div style={{ background: `${details.color}10`, padding: '12px', borderRadius: '8px', border: `1px solid ${details.color}20` }}>
+                                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Actual Measurement</p>
+                                      <p style={{ fontSize: '1.1rem', fontWeight: 700, color: details.color }}>{details.actual}</p>
+                                    </div>
+                                    <div style={{ background: 'rgba(16,181,129,0.1)', padding: '12px', borderRadius: '8px', border: '1px solid #d1fae530' }}>
+                                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Fraud Score</p>
+                                      <p style={{ fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>{fraudScore.toFixed(1)}%</p>
+                                    </div>
+                                    <div style={{ background: 'rgba(6,182,212,0.1)', padding: '12px', borderRadius: '8px', border: '1px solid #06b6d430' }}>
+                                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Decision Confidence</p>
+                                      <p style={{ fontSize: '1.1rem', fontWeight: 700, color: '#06b6d4' }}>{confidenceScore.toFixed(1)}%</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {/* Location Data */}
+                                <div style={{ marginBottom: '24px' }}>
+                                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', marginBottom: '12px' }}>📍 Location & Risk Context</h4>
+                                  <div style={{ background: 'rgba(0,0,0,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid var(--card-border)' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                      <div>
+                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Zone</p>
+                                        <p style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>{details.zone}</p>
+                                      </div>
+                                      <div>
+                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Coordinates</p>
+                                        <p style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)', fontFamily: 'monospace' }}>{details.coordinates}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {/* Trigger Factors */}
+                                <div style={{ marginBottom: '24px' }}>
+                                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', marginBottom: '12px' }}>🔍 Trigger Factors Evaluated</h4>
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                                    {details.factors.map((factor, i) => (
+                                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', background: 'rgba(0,0,0,0.02)', borderRadius: '6px', border: '1px solid var(--card-border)' }}>
+                                        <span style={{ fontSize: '1rem', opacity: 0.7 }}>✓</span>
+                                        <span style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{factor}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                
+                                {/* Payout Calculation Logic */}
+                                <div>
+                                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', marginBottom: '12px' }}>💰 Payout Calculation</h4>
+                                  <div style={{ background: 'rgba(0,0,0,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid var(--card-border)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                                    <p>Base Premium: ₹79.20/week</p>
+                                    <p>Trigger Multiplier: {c.reason.includes('Rain') ? '8.0x' : c.reason.includes('Heat') ? '9.0x' : '11.0x'}</p>
+                                    <p>Variance Factor: ±{Math.random().toFixed(2)}</p>
+                                    <p style={{ borderTop: '1px solid var(--card-border)', paddingTop: '8px', marginTop: '8px', fontWeight: 600, color: details.color }}>Final Payout: ₹{c.amount}</p>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Max Cap: ₹500 | Status: APPROVED | Processed: Instant</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -2497,23 +2958,171 @@ export default function App() {
           {adminTab === 'triggers' && (
             <>
               <header style={{ marginBottom: '32px' }}>
-                <h1 className="animate-slide-up">Trigger Monitoring</h1>
-                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Active API endpoints generating parametric truths.</p>
+                <h1 className="animate-slide-up">🌍 Parametric Event Triggers</h1>
+                <p className="animate-slide-up delay-100" style={{ color: 'var(--text-muted)' }}>Location-based automatic claim generation. One trigger = Multiple workers auto-compensated.</p>
               </header>
-              <div className="grid-3">
-                {PREDEFINED_TRIGGERS.map((t, idx) => (
-                  <div key={idx} className="card glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ padding: '12px', background: 'rgba(0,115,152,0.1)', borderRadius: '12px', color: 'var(--primary)' }}>
-                      {t.icon}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>{t.condition}</div>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                        <div style={{ width: 8, height: 8, background: 'var(--accent-green)', borderRadius: '50%' }}></div> Polling Every 60s
+
+              {/* City Selection + Trigger Buttons */}
+              <div className="card glass-panel animate-slide-up delay-200" style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '32px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px', color: 'var(--text-main)' }}>Select City for Event</label>
+                  <select 
+                    value={parametricCity} 
+                    onChange={(e) => setParametricCity(e.target.value)}
+                    style={{ 
+                      width: '100%', 
+                      padding: '12px 16px', 
+                      borderRadius: '12px', 
+                      border: '1px solid rgba(0,115,152,0.2)', 
+                      fontSize: '1rem',
+                      fontWeight: 500,
+                      background: '#ffffff',
+                      color: '#0f172a'
+                    }}
+                  >
+                    <option value="Mumbai">🌆 Mumbai (Western India)</option>
+                    <option value="Bangalore">🏙️ Bangalore (Southern India)</option>
+                    <option value="Delhi">🌃 Delhi (Northern India)</option>
+                    <option value="Chennai">🌊 Chennai (Coastal)</option>
+                    <option value="Pune">⛰️ Pune (Hill Station)</option>
+                    <option value="Hyderabad">🏛️ Hyderabad (Central India)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-main)' }}>Event Type (Click to Trigger)</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+                    {/* Heavy Rain Trigger */}
+                    <button 
+                      onClick={handleParametricRainTrigger}
+                      disabled={parametricTriggerLoading}
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        gap: '12px',
+                        padding: '20px',
+                        background: 'linear-gradient(135deg, rgba(59,130,246,0.1), rgba(59,130,246,0.05))',
+                        border: '1px solid rgba(59,130,246,0.3)',
+                        borderRadius: '16px',
+                        cursor: parametricTriggerLoading ? 'wait' : 'pointer',
+                        transition: 'all 0.3s ease',
+                        opacity: parametricTriggerLoading ? 0.6 : 1
+                      }}
+                    >
+                      <div style={{ fontSize: '2rem' }}>🌧️</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Heavy Rain Event</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Rainfall >50mm/hr detected</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 500, color: '#3b82f6', marginTop: '8px' }}>
+                        {parametricTriggerLoading ? 'Triggering...' : 'Click to trigger for ' + parametricCity}
                       </div>
+                    </button>
+
+                    {/* Extreme Heat Trigger */}
+                    <button 
+                      onClick={handleParametricHeatTrigger}
+                      disabled={parametricTriggerLoading}
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        gap: '12px',
+                        padding: '20px',
+                        background: 'linear-gradient(135deg, rgba(249,115,22,0.1), rgba(249,115,22,0.05))',
+                        border: '1px solid rgba(249,115,22,0.3)',
+                        borderRadius: '16px',
+                        cursor: parametricTriggerLoading ? 'wait' : 'pointer',
+                        transition: 'all 0.3s ease',
+                        opacity: parametricTriggerLoading ? 0.6 : 1
+                      }}
+                    >
+                      <div style={{ fontSize: '2rem' }}>🔥</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Extreme Heat Event</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Temperature >44°C detected</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 500, color: '#f97316', marginTop: '8px' }}>
+                        {parametricTriggerLoading ? 'Triggering...' : 'Click to trigger for ' + parametricCity}
+                      </div>
+                    </button>
+
+                    {/* Civic Strike Trigger */}
+                    <button 
+                      onClick={handleParametricStrikeTrigger}
+                      disabled={parametricTriggerLoading}
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        gap: '12px',
+                        padding: '20px',
+                        background: 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(239,68,68,0.05))',
+                        border: '1px solid rgba(239,68,68,0.3)',
+                        borderRadius: '16px',
+                        cursor: parametricTriggerLoading ? 'wait' : 'pointer',
+                        transition: 'all 0.3s ease',
+                        opacity: parametricTriggerLoading ? 0.6 : 1
+                      }}
+                    >
+                      <div style={{ fontSize: '2rem' }}>🚨</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Civic Strike Event</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Complete income disruption</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 500, color: '#ef4444', marginTop: '8px' }}>
+                        {parametricTriggerLoading ? 'Triggering...' : 'Click to trigger for ' + parametricCity}
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Results Display */}
+              {parametricTriggerResult && (
+                <div className="card glass-panel animate-slide-up delay-300" style={{ padding: '32px', background: 'linear-gradient(135deg, rgba(16,185,129,0.05), rgba(16,185,129,0.02))', borderLeft: '4px solid var(--accent-green)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+                    <div style={{ fontSize: '2rem' }}>✅</div>
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700 }}>Parametric Trigger Activated</h2>
+                      <p style={{ margin: '4px 0 0 0', color: 'var(--text-muted)', fontSize: '0.95rem' }}>{parametricTriggerResult.message}</p>
                     </div>
                   </div>
-                ))}
+
+                  <div className="grid-3" style={{ gap: '20px', marginBottom: '24px' }}>
+                    <div style={{ padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.1)' }}>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>Location Triggered</div>
+                      <div style={{ fontSize: '1.6rem', fontWeight: 700, margin: '8px 0', color: '#0f172a' }}>{parametricTriggerResult.location}</div>
+                    </div>
+                    <div style={{ padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.1)' }}>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>Workers Affected</div>
+                      <div style={{ fontSize: '1.6rem', fontWeight: 700, margin: '8px 0', color: '#0f172a' }}>{parametricTriggerResult.affected_workers_count}</div>
+                    </div>
+                    <div style={{ padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.1)' }}>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>Total Payouts</div>
+                      <div style={{ fontSize: '1.6rem', fontWeight: 700, margin: '8px 0', color: 'var(--accent-green)' }}>₹{parametricTriggerResult.total_payout.toLocaleString()}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'white', borderRadius: '12px', padding: '16px', maxHeight: '300px', overflowY: 'auto' }}>
+                    <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', fontWeight: 600 }}>Affected Workers</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {parametricTriggerResult.affected_workers?.map((worker, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: 'rgba(16,185,129,0.05)', borderRadius: '8px', borderLeft: '3px solid var(--accent-green)' }}>
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#0f172a' }}>Worker #{worker.worker_id}: {worker.worker_name}</div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{worker.policy_tier} Tier Policy</div>
+                          </div>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-green)' }}>₹{worker.payout}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Info Banner */}
+              <div className="card glass-panel animate-slide-up delay-400" style={{ padding: '24px', background: 'linear-gradient(135deg, rgba(59,130,246,0.05), rgba(0,115,152,0.05))', borderLeft: '4px solid var(--primary)' }}>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '1.05rem', fontWeight: 600, color: '#0f172a' }}>🎯 How Parametric Triggers Work</h3>
+                <ul style={{ margin: 0, paddingLeft: '20px', color: 'var(--text-muted)', lineHeight: '1.8' }}>
+                  <li><strong>Real-Time Detection:</strong> System detects weather/civic events by location</li>
+                  <li><strong>Automatic Querying:</strong> A single trigger queries all workers in affected city with ACTIVE policies</li>
+                  <li><strong>Instant Payouts:</strong> Claims APPROVED immediately with zero fraud risk (parametric logic = automatic)</li>
+                  <li><strong>Multi-Worker Compensation:</strong> One click can compensate 100-1000+ workers in seconds</li>
+                  <li><strong>No Manual Intervention:</strong> Workers don't click anything - they receive claims automatically</li>
+                </ul>
               </div>
             </>
           )}

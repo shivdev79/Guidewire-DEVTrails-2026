@@ -1,0 +1,45 @@
+1. Parametric Insurance Fundamentals
+Core Concept: Unlike traditional indemnity insurance that requires manual loss assessment and documentation, parametric insurance is an event-driven, index-based model.
+
+Automation: The system operates on predefined threshold limits (e.g., specific Air Quality Index or rainfall measurements). Once a threshold is crossed, a fixed payout is automatically transferred directly to the worker's bank account with zero manual intervention or approval steps.
+
+2. Underwriting and Trigger Design
+Risk Pooling: Risk pools must be strictly separated by peril and city. For example, a Delhi AQI pool must be managed completely separately from a Mumbai rain pool to ensure accurate risk modeling.
+
+Trigger Granularity: Avoid using generalized, city-wide weather averages. Triggers should be designed using highly localized ward-level data or specific geofences on a daily or weekly basis.
+
+Warranties (Conditions): To prevent moral hazard (such as users signing up right before a storm), implement an activity warranty. For example, mandate a minimum of 7 active delivery days before a worker is covered.
+
+Data Models: Trigger thresholds should be backed by statistical simulations using 5 to 15 years of historical data or third-party oracle data.
+
+3. Pricing and Actuarial Guidelines
+Target Premium Range: The weekly premium must remain highly affordable, targeted strictly between ₹20 and ₹50 per worker. Premiums approaching ₹150 are considered too high.
+
+Pricing Formula: Base pricing should utilize the following structure: Expected Loss = Probability of Event × Average Income × Exposure (the payout amount). This must be adjusted based on the worker's tier and geographic hazard level.
+
+Loss Ratio / Burning Cost: Track the ratio of total claims paid to total premiums collected. If this loss ratio exceeds 85% to 100%, the system must feature an automated fail-safe that halts new enrollments for that specific pool to maintain liquidity.
+
+Stress Testing: Your actuarial model must include "what-if" scenarios, such as demonstrating how the liquidity pool survives a continuous 14-day monsoon period hitting multiple cities simultaneously.
+
+4. Zero-Touch Claims Architecture
+The automated claims lifecycle must be executed in four distinct parts :
+
+Trigger Validation: A meteorological API or oracle detects an event crossing the defined threshold.
+
+Policy Verification: The system identifies all active workers within the affected geofence and verifies their policy status.
+
+Fraud Check: The system cross-references GPS data and platform login states to verify the worker was active and not spoofing their location.
+
+Instant Settlement: The payout is executed within minutes via UPI or RTGS, followed by an SMS confirmation. The system must also include rollback logic in case the bank transfer fails mid-way.
+
+5. Handling Edge Cases (Insights from Expert Q&A)
+Network Blackouts: If an individual worker's device goes offline, it may be suspicious. However, if a geographic cluster of workers (e.g., 3 to 4 workers in the same zone) lose network connectivity simultaneously during a hazard, the system should interpret this as a legitimate infrastructural failure and process the payout.
+
+Tiered Payouts: Infrastructural recovery times vary. A Tier 1 metropolitan area with good drainage may recover from a storm in hours, while a Tier 4 rural area may be paralyzed for a full day. Your payout models should be tiered to reflect these geographic differences.
+
+6. Phase 2 Deliverables and Submission Rules
+Core Executables: Phase 2 requires functional, executable code. You must implement the full lifecycle: automated registration, policy management, dynamic premium calculation, and the automated claims management pipeline.
+
+Submission Formatting: Your solution must be publicly accessible. Submitting private GitHub repositories or locked drive links will result in disqualification.
+
+Execution Verification: You can submit a live deployed application (URL), a packaged SDK, or local source code. If submitting local code, it must include a comprehensive README detailing all dependencies, environment setups, and exact commands required for the judges to run your application locally.
