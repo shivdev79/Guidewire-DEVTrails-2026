@@ -4,6 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, CheckCircle2, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase, Loader2, X, PlusCircle, Smartphone, Building2, ShoppingBag, Lock } from 'lucide-react';
 import RegistrationFlow from './RegistrationFlow';
 import ControlCenter from './ControlCenter';
+import Testimonials from './Testimonials';
+import InfoSection from './InfoSection';
+import Chatbot from './Chatbot';
 
 /** Use 127.0.0.1 on Windows to avoid occasional localhost / IPv6 resolution issues */
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8000`;
@@ -1036,6 +1039,8 @@ export default function App() {
           </div>
         </div>
 
+        <InfoSection />
+        <Testimonials />
       </div>
 
       {/* Coverage Section */}
@@ -2640,6 +2645,7 @@ export default function App() {
       {renderConfirmPlanModal()}
       {renderErrorModal()}
       {renderPlanPromptToast()}
+      <Chatbot callbackPhone={riderInfo.mobile || ''} />
     </>
   );
 }
