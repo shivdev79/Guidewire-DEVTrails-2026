@@ -779,8 +779,9 @@ def demo_trigger_fraud_rejection(worker_id: int, db: Session = Depends(get_db)):
             models.Policy.status == "ACTIVE"
         ).first()
         
+        # Override policy requirement for demo node
         if not policy:
-            raise HTTPException(status_code=400, detail="No active policy")
+            pass
         
         # Create REJECTED claim to show fraud detection works
         claim = models.Claim(

@@ -493,12 +493,33 @@ export default function ControlCenter({ setCurrentView, workerId, adminLogs = []
                 </div>
               </div>
 
-              <div className="card" style={{ background: 'linear-gradient(90deg, #f8fafc, #f1f5f9)', border: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div className="card" style={{ background: 'linear-gradient(90deg, rgba(239, 68, 68, 0.05), rgba(220, 38, 38, 0.1))', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                  <div>
-                   <h3 style={{ color: 'var(--text-main)', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}><Play size={20} fill="var(--primary)" color="var(--primary)"/> Fraud Replay Simulation UI</h3>
-                   <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.95rem' }}>Full context step-by-step 3D playback of flagged claims for manual review SIU teams.</p>
+                   <h3 style={{ color: 'var(--text-main)', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}><ShieldAlert size={20} fill="var(--accent-red)" color="white"/> Active Fraud Intervention</h3>
+                   <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.95rem' }}>Instantly simulate an intercepted claim (e.g., GPS Spoofing & Distance Impossible Mismatch).</p>
                  </div>
-                 <button className="btn btn-primary" style={{ padding: '12px 24px', fontSize: '1rem' }}>Launch Replay Viewer</button>
+                 <button 
+                   className="btn btn-primary" 
+                   style={{ padding: '12px 24px', fontSize: '1rem', background: '#ef4444', border: 'none' }}
+                   onClick={async (e) => {
+                     const btn = e.currentTarget;
+                     const originText = btn.innerText;
+                     btn.innerText = 'Intercepting...';
+                     btn.disabled = true;
+                     try {
+                        const targetId = workerId || localStorage.getItem('aegis_demo_worker_id') || '1';
+                        await axios.post(`${API_BASE_URL}/demo/trigger-fraud-rejection/${targetId}`);
+                        btn.innerText = 'Fraud Intercepted & Blocked!';
+                        setTimeout(() => { btn.innerText = originText; btn.disabled = false; }, 3000);
+                     } catch (err) {
+                        btn.innerText = 'Target Error';
+                        console.error('Fraud trigger failed:', err);
+                        setTimeout(() => { btn.innerText = originText; btn.disabled = false; }, 3000);
+                     }
+                   }}
+                 >
+                   Simulate GPS Spoofing Intercept
+                 </button>
               </div>
             </div>
           )}
