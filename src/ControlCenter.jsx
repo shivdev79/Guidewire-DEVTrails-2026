@@ -11,7 +11,7 @@ import {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8000`;
 
-export default function ControlCenter({ setCurrentView, adminLogs = [], engineStates = {}, parametricTriggerResult = null, setParametricTriggerResult = () => {}, parametricCity = 'Mumbai', setParametricCity = () => {}, parametricTriggerLoading = false, handleParametricRainTrigger = () => {}, handleParametricHeatTrigger = () => {}, handleParametricStrikeTrigger = () => {} }) {
+export default function ControlCenter({ setCurrentView, workerId, adminLogs = [], engineStates = {}, parametricTriggerResult = null, setParametricTriggerResult = () => {}, parametricCity = 'Mumbai', setParametricCity = () => {}, parametricTriggerLoading = false, handleParametricRainTrigger = () => {}, handleParametricHeatTrigger = () => {}, handleParametricStrikeTrigger = () => {} }) {
   const [activeTab, setActiveTab] = useState('overview');
   // Local state for live terminals to give the "OS" feel
   const [liveStream, setLiveStream] = useState([]);
@@ -175,20 +175,21 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
   };
 
   const navItems = [
-    { id: 'overview', label: '1. Overview', icon: <Activity size={18} /> },
-    { id: 'risk', label: '2. Risk Intelligence', icon: <Map size={18} /> },
-    { id: 'claims', label: '3. Claims & Payouts', icon: <FileSearch size={18} /> },
-    { id: 'fraud', label: '4. Fraud Intelligence', icon: <ShieldAlert size={18} /> },
-    { id: 'premium', label: '5. Premium & Actuarial', icon: <Landmark size={18} /> },
-    { id: 'behavior', label: '6. User Behavior', icon: <Users size={18} /> },
-    { id: 'trigger', label: '7. Trigger Engine', icon: <Zap size={18} /> },
-    { id: 'models', label: '8. AI Model Monitoring', icon: <BrainCircuit size={18} /> },
-    { id: 'health', label: '9. System Health', icon: <Settings size={18} /> },
-    { id: 'finance', label: '10. Financial Control', icon: <TrendingDown size={18} /> },
-    { id: 'security', label: '11. Security & Device', icon: <Lock size={18} /> },
-    { id: 'events', label: '12. Event Stream', icon: <Database size={18} /> },
-    { id: 'decision', label: '13. Decision Engine', icon: <Cpu size={18} /> },
-    { id: 'demo', label: '14. Demo Scenarios', icon: <Play size={18} style={{ color: 'var(--accent-orange)' }} /> },
+    { id: 'livefeeds', label: '1. Live Feeds', icon: <ActivitySquare size={18} style={{ color: 'var(--accent-green)' }} /> },
+    { id: 'overview', label: '2. Overview', icon: <Activity size={18} /> },
+    { id: 'risk', label: '3. Risk Intelligence', icon: <Map size={18} /> },
+    { id: 'claims', label: '4. Claims & Payouts', icon: <FileSearch size={18} /> },
+    { id: 'fraud', label: '5. Fraud Intelligence', icon: <ShieldAlert size={18} /> },
+    { id: 'premium', label: '6. Premium & Actuarial', icon: <Landmark size={18} /> },
+    { id: 'behavior', label: '7. User Behavior', icon: <Users size={18} /> },
+    { id: 'trigger', label: '8. Trigger Engine', icon: <Zap size={18} /> },
+    { id: 'models', label: '9. AI Model Monitoring', icon: <BrainCircuit size={18} /> },
+    { id: 'health', label: '10. System Health', icon: <Settings size={18} /> },
+    { id: 'finance', label: '11. Financial Control', icon: <TrendingDown size={18} /> },
+    { id: 'security', label: '12. Security & Device', icon: <Lock size={18} /> },
+    { id: 'events', label: '13. Event Stream', icon: <Database size={18} /> },
+    { id: 'decision', label: '14. Decision Engine', icon: <Cpu size={18} /> },
+    { id: 'demo', label: '15. Demo Scenarios', icon: <Play size={18} style={{ color: 'var(--accent-orange)' }} /> },
   ];
 
   const KPICard = ({ title, value, sub, icon, isAlert }) => (
@@ -519,7 +520,7 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
                    </h3>
                    {analyticsData.premium?.circuit_breaker_triggered && (
                      <div style={{ padding: '16px', background: 'rgba(239, 68, 68, 0.1)', borderLeft: '4px solid var(--accent-red)', borderRadius: '8px', marginBottom: '16px' }}>
-                       <div style={{ color: 'var(--accent-red)', fontWeight: 600, fontSize: '1rem' }}>Fail-Safe Activated: Loss Ratio > 85%</div>
+                       <div style={{ color: 'var(--accent-red)', fontWeight: 600, fontSize: '1rem' }}>Fail-Safe Activated: Loss Ratio &gt; 85%</div>
                        <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', marginTop: '8px' }}>New enrollments halted to preserve liquidity pool</div>
                      </div>
                    )}
@@ -540,7 +541,7 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
                   <h3 style={{ marginBottom: '16px', color: 'var(--accent-green)' }}>Stress Test Results</h3>
                   <div style={{ padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid var(--card-border)', marginBottom: '16px' }}>
                     <div style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px' }}>Scenario: 14-Day Continuous Monsoon</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px' }}>Delhi + Mumbai simultaneous rainfall > 50mm/hr</div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px' }}>Delhi + Mumbai simultaneous rainfall &gt; 50mm/hr</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '8px' }}>
                       <span>Pool Survival Forecast:</span>
                       <span style={{ color: 'var(--accent-green)', fontWeight: 700, fontSize: '1.1rem' }}>✅ PASS</span>
@@ -647,7 +648,7 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
                     >
                       <div style={{ fontSize: '2rem' }}>🌧️</div>
                       <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Heavy Rain Event</div>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Rainfall >50mm/hr detected</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Rainfall &gt;50mm/hr detected</div>
                       <div style={{ fontSize: '0.8rem', fontWeight: 500, color: '#3b82f6', marginTop: '8px' }}>
                         {parametricTriggerLoading ? 'Triggering...' : 'Click to trigger for ' + parametricCity}
                       </div>
@@ -672,7 +673,7 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
                     >
                       <div style={{ fontSize: '2rem' }}>🔥</div>
                       <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Extreme Heat Event</div>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Temperature >44°C detected</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Temperature &gt;44°C detected</div>
                       <div style={{ fontSize: '0.8rem', fontWeight: 500, color: '#f97316', marginTop: '8px' }}>
                         {parametricTriggerLoading ? 'Triggering...' : 'Click to trigger for ' + parametricCity}
                       </div>
@@ -1173,6 +1174,161 @@ export default function ControlCenter({ setCurrentView, adminLogs = [], engineSt
                   <li>✅ Each claim appears with real payout calculated</li>
                   <li>✅ Click "Stop Demo & Reset" to return to normal</li>
                 </ul>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'livefeeds' && (
+            <div className="animate-slide-up" style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>Parametric Triggers</h2>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '32px' }}>
+                {/* Weather */}
+                <div style={{ background: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', position: 'relative' }}>
+                  <div style={{ color: '#475569', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <CloudRainWind size={16} /> Weather
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '16px' }}>Heavy Rain {`>50mm/hr`}</div>
+                  <button 
+                    onClick={async () => {
+                      setDemoLoading(true);
+                      try {
+                        const targetLoc = `w-${workerId || localStorage.getItem('aegis_demo_worker_id') || '1'}`;
+                        const res = await axios.post(`${API_BASE_URL}/admin/trigger-event`, {
+                          location: targetLoc, trigger_type: 'Heavy Rain', description: 'Heavy Rain >50mm/hr'
+                        });
+                        alert(`✅ Worker portal automatically synced!\n💰 Instant Payout: ₹${res.data.total_payout.toLocaleString()}`);
+                      } catch (e) { alert('Error: ' + e.message); }
+                      finally { setDemoLoading(false); }
+                      setTimeout(() => setAnalyticsData(prev => ({ ...prev })), 1000);
+                    }}
+                    disabled={demoLoading || parametricTriggerLoading}
+                    style={{ position: 'absolute', top: '16px', right: '16px', fontSize: '0.8rem', padding: '4px 12px', borderRadius: '4px', border: '1px solid #ef4444', color: '#ef4444', background: 'transparent', cursor: 'pointer' }}
+                  >
+                    Simulate
+                  </button>
+                </div>
+
+                {/* AQI */}
+                <div style={{ background: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', position: 'relative' }}>
+                  <div style={{ color: '#475569', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <AlertOctagon size={16} /> Aqi
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '16px' }}>Severe AQI {`>300`}</div>
+                  <button 
+                    onClick={async () => {
+                       setDemoLoading(true);
+                       try {
+                         const targetLoc = `w-${workerId || localStorage.getItem('aegis_demo_worker_id') || '1'}`;
+                         const res = await axios.post(`${API_BASE_URL}/admin/trigger-event`, {
+                           location: targetLoc, trigger_type: 'Critical AQI', description: 'Severe AQI (>300)'
+                         });
+                         alert(`✅ Worker portal automatically synced!\n💰 Instant Payout: ₹${res.data.total_payout.toLocaleString()}`);
+                       } catch (e) { alert('Error: ' + e.message); }
+                       finally {
+                         setDemoLoading(false);
+                         setTimeout(() => setAnalyticsData(prev => ({ ...prev })), 1000);
+                       }
+                    }}
+                    disabled={demoLoading || parametricTriggerLoading}
+                    style={{ position: 'absolute', top: '16px', right: '16px', fontSize: '0.8rem', padding: '4px 12px', borderRadius: '4px', border: '1px solid #ef4444', color: '#ef4444', background: 'transparent', cursor: 'pointer' }}
+                  >
+                    Simulate
+                  </button>
+                </div>
+
+                {/* Temperature */}
+                <div style={{ background: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', position: 'relative' }}>
+                  <div style={{ color: '#475569', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <AlertTriangle size={16} /> Temperature
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '16px' }}>Extreme Heat {`>45°C`}</div>
+                  <button 
+                    onClick={async () => {
+                      setDemoLoading(true);
+                      try {
+                        const targetLoc = `w-${workerId || localStorage.getItem('aegis_demo_worker_id') || '1'}`;
+                        const res = await axios.post(`${API_BASE_URL}/admin/trigger-event`, {
+                          location: targetLoc, trigger_type: 'Extreme Heat', description: 'Extreme Heat >45°C'
+                        });
+                        alert(`✅ Worker portal automatically synced!\n💰 Instant Payout: ₹${res.data.total_payout.toLocaleString()}`);
+                      } catch (e) { alert('Error: ' + e.message); }
+                      finally { setDemoLoading(false); }
+                      setTimeout(() => setAnalyticsData(prev => ({ ...prev })), 1000);
+                    }}
+                    disabled={demoLoading || parametricTriggerLoading}
+                    style={{ position: 'absolute', top: '16px', right: '16px', fontSize: '0.8rem', padding: '4px 12px', borderRadius: '4px', border: '1px solid #ef4444', color: '#ef4444', background: 'transparent', cursor: 'pointer' }}
+                  >
+                    Simulate
+                  </button>
+                </div>
+
+                {/* Traffic */}
+                <div style={{ background: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', position: 'relative' }}>
+                  <div style={{ color: '#475569', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <Siren size={16} /> Traffic
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '16px' }}>City Lockdown/Curfew</div>
+                  <button 
+                    onClick={async () => {
+                      setDemoLoading(true);
+                      try {
+                        const targetLoc = `w-${workerId || localStorage.getItem('aegis_demo_worker_id') || '1'}`;
+                        const res = await axios.post(`${API_BASE_URL}/admin/trigger-event`, {
+                          location: targetLoc, trigger_type: 'Civic Strike', description: 'City Lockdown/Curfew'
+                        });
+                        alert(`✅ Worker portal automatically synced!\n💰 Instant Payout: ₹${res.data.total_payout.toLocaleString()}`);
+                      } catch (e) { alert('Error: ' + e.message); }
+                      finally { setDemoLoading(false); }
+                      setTimeout(() => setAnalyticsData(prev => ({ ...prev })), 1000);
+                    }}
+                    disabled={demoLoading || parametricTriggerLoading}
+                    style={{ position: 'absolute', top: '16px', right: '16px', fontSize: '0.8rem', padding: '4px 12px', borderRadius: '4px', border: '1px solid #ef4444', color: '#ef4444', background: 'transparent', cursor: 'pointer' }}
+                  >
+                    Simulate
+                  </button>
+                </div>
+              </div>
+
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--text-main)' }}>Recent Automations</h2>
+              
+              <div className="grid-2">
+                <div className="card glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
+                   <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc' }}>
+                     <Banknote size={16} /> Instant Payout Ledger
+                   </div>
+                   <div style={{ overflowY: 'auto', height: '350px', backgroundColor: '#f1f5f9', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                     {(analyticsData.ledger?.ledgers || []).slice(0, 15).map((l, i) => (
+                       <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#334155' }}>{l.description}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Worker {l.worker_id} • {new Date(l.created_at).toLocaleString()}</div>
+                          </div>
+                          <div style={{ fontWeight: 600, fontSize: '0.95rem', color: l.txn_type === 'CREDIT' ? '#10b981' : '#f59e0b' }}>
+                             {l.txn_type === 'CREDIT' ? '+' : '-'}₹{l.amount}
+                          </div>
+                       </div>
+                     ))}
+                     {(!analyticsData.ledger?.ledgers || analyticsData.ledger?.ledgers.length === 0) && (
+                       <div style={{ color: '#94a3b8', fontSize: '0.9rem', textAlign: 'center', marginTop: '40px' }}>No transactions recorded yet. Simulate an event above.</div>
+                     )}
+                   </div>
+                </div>
+
+                <div className="card glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
+                  <div style={{ padding: '16px 20px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: '8px', background: '#0f172a', color: 'white' }}>
+                     <Cpu size={16} /> Live System Activities
+                  </div>
+                  <div style={{ 
+                    background: '#0f172a', color: '#86efac', padding: '16px',
+                    fontFamily: 'monospace', fontSize: '0.85rem', height: '350px', overflowY: 'hidden', display: 'flex', flexDirection: 'column', gap: '8px'
+                  }}>
+                    {liveStream.map(l => <div key={l.id}>{l.log}</div>)}
+                    <div style={{ opacity: 0.5 }}>... listening on wss://aegis.cloud/telemetry/ws</div>
+                  </div>
+                </div>
               </div>
             </div>
           )}

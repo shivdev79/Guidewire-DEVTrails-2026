@@ -128,7 +128,7 @@ export default function PlanSelection({
         triggers: ['Rain (>15mm/hr)', 'AQI (>250)', 'Civic Strikes', 'Platform Outage'],
         recoverPercentage: 50,
         perks: ['Claim: <12h processing', 'Wallet: 20% cashback', 'Mid-week rebate', 'Safe zone alerts'],
-        recommended: true,
+        recommended: false,
         minEarnings: 5000,
         maxEarnings: 10000,
       },
@@ -181,8 +181,9 @@ export default function PlanSelection({
 
     setIsAddingBalance(true);
     try {
+      const parsedWorkerId = typeof workerId === 'number' ? workerId : parseInt(String(workerId).replace(/\D/g, ''), 10) || 1;
       const res = await axios.post(`${API_BASE_URL}/wallet/top-up`, {
-        worker_id: workerId,
+        worker_id: parsedWorkerId,
         amount: parseFloat(addBalanceAmount),
         source: 'MANUAL_TOP_UP'
       });
@@ -218,8 +219,9 @@ export default function PlanSelection({
 
     try {
       // Create policy on backend
+      const parsedWorkerId = typeof workerId === 'number' ? workerId : parseInt(String(workerId).replace(/\D/g, ''), 10) || 1;
       const policyRes = await axios.post(`${API_BASE_URL}/create-policy`, {
-        worker_id: workerId,
+        worker_id: parsedWorkerId,
         tier: selectedPlan.tier,
         accepted_terms: true,
       });
