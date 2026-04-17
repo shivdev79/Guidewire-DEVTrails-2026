@@ -7,8 +7,8 @@
 
 [build.environment]
   NODE_VERSION = "18"
-  # Backend API URL - Override in Netlify UI for production
-  VITE_API_BASE_URL = "http://localhost:8000"
+  # Backend API URL (Production via Render)
+  VITE_API_BASE_URL = "https://guidewire-backend-uypf.onrender.com"
 
 # Proxy API calls to backend
 [[redirects]]
