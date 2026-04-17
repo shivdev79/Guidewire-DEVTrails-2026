@@ -611,8 +611,9 @@ export default function Chatbot({ callbackPhone = '' }) {
                       inputMode="tel"
                       autoComplete="tel"
                       value={phoneEditInput}
-                      onChange={(e) => setPhoneEditInput(e.target.value)}
-                      placeholder="Best number for a quick call"
+                      onChange={(e) => setPhoneEditInput(e.target.value.replace(/\D/g, '').substring(0, 10))}
+                      maxLength="10"
+                      placeholder="9876543210"
                       style={{
                         width: '100%',
                         padding: '10px 14px',

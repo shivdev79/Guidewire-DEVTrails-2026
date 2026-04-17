@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, CloudRain, Wind, Thermometer, AlertTriangle, CloudRainWind, Wallet, CheckCircle, CheckCircle2, Activity, Search, Siren, Sun, FileText, Upload, User, Bell, Clock, CreditCard, Banknote, Landmark, ListPlus, ShieldCheck, TrendingDown, AlertOctagon, BarChart2, CalendarClock, HelpCircle, Send, Map, Radio, ShieldAlert, FileSearch, Settings, ArrowRightLeft, BrainCircuit, PieChart, Users, Zap, Download, CalendarCheck, Lightbulb, Gauge, ChevronDown, Sliders, Car, Briefcase, Loader2, X, PlusCircle, Smartphone, Building2, ShoppingBag, Lock } from 'lucide-react';
@@ -66,17 +66,11 @@ function mergeWalletTransactionsFromDashboard(walletLedger, claims) {
       amount: Math.abs(Number(e.amount || 0)),
     });
   }
-  for (const c of claims || []) {
-    if (String(c.status || '').toUpperCase() !== 'APPROVED') continue;
-    rows.push({
-      sortKey: c.created_at ? new Date(c.created_at).getTime() : 0,
-      id: `CLM-${c.id}`,
-      date: formatINRDate(c.created_at),
-      desc: `Parametric payout — ${c.trigger_type || 'Claim'}`,
-      type: 'Credit',
-      amount: Math.abs(Number(c.payout_amount || 0)),
-    });
-  }
+  
+  // Note: We purposely do NOT merge `claims` into the ledger here, 
+  // because the backend now creates a WalletLedger entry for EVERY payout claim.
+  // Including claims here double-counts the wallet payouts incorrectly.
+  
   rows.sort((a, b) => b.sortKey - a.sortKey);
   return rows.map(({ sortKey, ...rest }) => rest);
 }
@@ -350,6 +344,10 @@ export default function App() {
   const [parametricCity, setParametricCity] = useState('Mumbai');
   const [parametricTriggerLoading, setParametricTriggerLoading] = useState(false);
   
+  // Razorpay UI Mock tracker
+  const claimsCountRef = useRef(0);
+  const [razorpayPopupData, setRazorpayPopupData] = useState(null);
+  
   // Demo user & registration flow
   const [isDemoUser, setIsDemoUser] = useState(false);
   const [isFromRegistration, setIsFromRegistration] = useState(false);
@@ -407,13 +405,6 @@ export default function App() {
 
       const demoWorkerId = demoRes.data.id;
 
-      // Add wallet balance for demo user
-      await axios.post(`${API_BASE_URL}/wallet/top-up`, {
-        worker_id: demoWorkerId,
-        amount: 1000,
-        source: 'DEMO_INITIAL_BALANCE'
-      });
-
       setWorkerId(demoWorkerId);
       setIsDemoUser(true);
       setRiderInfo({
@@ -432,7 +423,7 @@ export default function App() {
       });
       
       // Set wallet balance for demo user
-      setWalletBalance(1000);
+      setWalletBalance(0);
       
       // Redirect to plan selection instead of dashboard
       setCurrentView('plan-selection');
@@ -455,7 +446,7 @@ export default function App() {
         email: 'demo@aegis.app',
         pincode: '400001',
       });
-      setWalletBalance(1000);
+      setWalletBalance(0);
       setCurrentView('plan-selection');
     }
   };
@@ -565,11 +556,31 @@ export default function App() {
             setActivatedPlan(null);
           }
           setRScore(data.worker.r_score);
-          setWalletBalance(Number(data.worker?.wallet_balance ?? 0));
-
-          setWalletTransactions(mergeWalletTransactionsFromDashboard(data.wallet_ledger, data.claims));
+          
+          const txns = mergeWalletTransactionsFromDashboard(data.wallet_ledger, data.claims);
+          setWalletTransactions(txns);
+          
+          // Calculate balance exactly from the transaction history so it's always consistent
+          const computedBalance = txns.reduce((sum, tx) => sum + (tx.type === 'Debit' ? -tx.amount : tx.amount), 0);
+          setWalletBalance(Math.max(0, computedBalance));
 
           if (Array.isArray(data.claims)) {
+            // Check for newly approved parametric claim
+            if (claimsCountRef.current > 0 && data.claims.length > claimsCountRef.current) {
+              const latestClaim = data.claims[0]; // descending order
+              if (latestClaim && latestClaim.status === 'APPROVED' && latestClaim.payout_amount > 0) {
+                // Trigger Razorpay Fast Transfer UI Overly
+                setRazorpayPopupData({
+                  amount: latestClaim.payout_amount,
+                  reason: latestClaim.trigger_type,
+                  bank: riderInfo.upi_id || 'demo@okaxis'
+                });
+                // Auto-hide popup after 6 seconds
+                setTimeout(() => setRazorpayPopupData(null), 6000);
+              }
+            }
+            claimsCountRef.current = data.claims.length;
+
             const formattedClaims = data.claims.map(c => ({
               id: 'CLM-' + c.id,
               date: new Date(c.created_at).toLocaleDateString(),
@@ -590,7 +601,8 @@ export default function App() {
       };
       
       fetchDashboard();
-      const interval = setInterval(fetchDashboard, 5000); // refresh every 5s for demo
+      // Ultra-fast Real-time polling for instant Live Feeds validation
+      const interval = setInterval(fetchDashboard, 500);
       return () => clearInterval(interval);
     }
   }, [workerId, currentView]);
@@ -670,8 +682,10 @@ export default function App() {
       try {
         const dash = await axios.get(`${API_BASE_URL}/worker/${wid}/dashboard`);
         const d = dash.data;
-        setWalletBalance(Number(d.worker?.wallet_balance ?? 0));
-        setWalletTransactions(mergeWalletTransactionsFromDashboard(d.wallet_ledger, d.claims));
+        const txns = mergeWalletTransactionsFromDashboard(d.wallet_ledger, d.claims);
+        setWalletTransactions(txns);
+        const computedBalance = txns.reduce((sum, tx) => sum + (tx.type === 'Debit' ? -tx.amount : tx.amount), 0);
+        setWalletBalance(Math.max(0, computedBalance));
       } catch {
         /* refresh best-effort */
       }
@@ -698,7 +712,7 @@ export default function App() {
           amount: amt,
           payment_method: addMoneyPaymentMethod,
         });
-        setWalletBalance(Number(res.data?.wallet_balance ?? 0));
+        setWalletBalance(prev => prev + amt);
         const t = res.data?.transaction;
         if (t) {
           setWalletTransactions(prev => {
@@ -857,30 +871,51 @@ export default function App() {
       <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 20px', color: 'white' }}>
         <div style={{ display: 'flex', maxWidth: '1200px', width: '100%', gap: '60px', alignItems: 'center' }}>
           
-          {/* Left Column (Marketing Copy) */}
-          <div style={{ flex: 1.2, paddingRight: '20px' }}>
-            <div style={{ display: 'inline-block', background: 'rgba(255, 199, 44, 0.2)', color: '#FFC72C', padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '1px', marginBottom: '24px' }}>
-              HIGH-YIELD RESILIENCE ASSET
-            </div>
-            
-            <h1 style={{ fontSize: '3.6rem', fontWeight: '800', margin: '0 0 24px 0', lineHeight: 1.15, textShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
-              Zero-Trust Parametric<br/>Income Protection
-            </h1>
-            <p style={{ fontSize: '1.25rem', fontFamily: '"Poppins", sans-serif', fontWeight: '400', color: '#e0f2fe', lineHeight: 1.6, marginBottom: '40px' }}>
-              Architecting a highly scalable, fraud-resistant "Income-as-a-Service" platform for India’s 15 million gig workers. Guaranteed weekly financial floors against environmental and social disruptions.
-            </p>
-            
-            {/* Feature Pills */}
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <div style={{ padding: '12px 20px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <CloudRainWind size={20} color="#FFC72C" />
-                <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Environmental Disruption</span>
+          {/* Left Column (Illustration & Copy) */}
+          <div style={{ flex: 1.2, position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.8 }} style={{ position: 'relative', zIndex: 1, marginBottom: '40px' }}>
+              <div style={{ display: 'inline-block', background: 'rgba(255, 199, 44, 0.2)', color: '#FFC72C', padding: '8px 18px', borderRadius: '30px', fontSize: '0.9rem', fontWeight: 800, letterSpacing: '1.5px', marginBottom: '24px', backdropFilter: 'blur(10px)', border: '1px solid rgba(255, 199, 44, 0.3)' }}>
+                HIGH-YIELD RESILIENCE ASSET
               </div>
-              <div style={{ padding: '12px 20px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Activity size={20} color="#FFC72C" />
-                <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Zero-Touch Automation</span>
+              <h1 style={{ fontSize: '4.2rem', fontWeight: '900', margin: '0 0 24px 0', lineHeight: 1.05, textShadow: '0 10px 40px rgba(0,0,0,0.3)', letterSpacing: '-1px' }}>
+                Zero-Trust<br/>Parametric<br/><span style={{ color: '#FFC72C' }}>Income Protection</span>
+              </h1>
+              <p style={{ fontSize: '1.35rem', fontFamily: '"Outfit", sans-serif', fontWeight: '400', color: '#e2e8f0', lineHeight: 1.6, maxWidth: '550px', marginBottom: '40px' }}>
+                Architecting a highly scalable, fraud-resistant "Income-as-a-Service" platform for India’s gig workforce. Guaranteed financial floors for the next billion workers.
+              </p>
+              <div style={{ display: 'flex', gap: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.05)', padding: '14px 24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <CloudRain size={24} color="#FFC72C" />
+                  <span style={{ fontWeight: 700, fontSize: '1rem' }}>Climate Risk</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.05)', padding: '14px 24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <ShieldCheck size={24} color="#FFC72C" />
+                  <span style={{ fontWeight: 700, fontSize: '1rem' }}>Instant Settlement</span>
+                </div>
               </div>
-            </div>
+            </motion.div>
+
+            {/* Bike Illustration Wrapper */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 40 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              transition={{ duration: 1, delay: 0.2 }}
+              style={{ position: 'relative', width: '100%', height: '400px', marginTop: '20px' }}
+            >
+              <motion.div
+                animate={{ y: [0, -15, 0] }}
+                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                style={{ width: '100%', height: '100%' }}
+              >
+                <img 
+                  src="/bike-illustration.png" 
+                  alt="Aegis Resilience" 
+                  style={{ width: 'auto', height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 20px 40px rgba(0,0,0,0.4))' }} 
+                />
+              </motion.div>
+              {/* Decorative elements behind bike */}
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '400px', height: '400px', background: 'radial-gradient(circle, rgba(255,199,44,0.1) 0%, transparent 70%)', zIndex: -1, filter: 'blur(40px)' }}></div>
+            </motion.div>
           </div>
 
           {/* Right Column (Glassmorphic Login Panel) */}
@@ -902,26 +937,40 @@ export default function App() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <motion.button whileHover={{ scale: 1.02, backgroundColor: 'rgba(255, 255, 255, 0.08)', borderColor: 'rgba(255, 255, 255, 0.15)' }} whileTap={{ scale: 0.98 }} style={{ padding: '20px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', transition: 'all 0.3s ease' }} onClick={() => setCurrentView('onboarding')}>
+                  <motion.button 
+                    whileHover={{ scale: 1.02, backgroundColor: 'rgba(255, 255, 255, 0.08)', borderColor: 'rgba(255, 199, 44, 0.4)' }} 
+                    whileTap={{ scale: 0.98 }} 
+                    style={{ padding: '24px 20px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }} 
+                    onClick={() => setCurrentView('onboarding')}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <div style={{ background: 'rgba(255, 199, 44, 0.15)', padding: '12px', borderRadius: '14px', border: '1px solid rgba(255, 199, 44, 0.1)' }}><User size={24} color="#FFC72C" /></div>
+                      <div style={{ background: 'linear-gradient(135deg, rgba(255, 199, 44, 0.2), rgba(245, 158, 11, 0.2))', padding: '14px', borderRadius: '18px', border: '1px solid rgba(255, 199, 44, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <User size={28} color="#FFC72C" />
+                      </div>
                       <div style={{ textAlign: 'left' }}>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc' }}>Partner / Rider</div>
-                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Access resilience wallet</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.3px' }}>Partner / Rider</div>
+                        <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '4px', fontWeight: 500 }}>Global Resilience Wallet Access</div>
                       </div>
                     </div>
-                    <ArrowRightLeft size={20} color="#FFC72C" opacity={0.8} />
+                    <ArrowRightLeft size={22} color="#FFC72C" style={{ filter: 'drop-shadow(0 0 8px rgba(255,199,44,0.4))' }} />
                   </motion.button>
 
-                  <motion.button whileHover={{ scale: 1.02, backgroundColor: 'rgba(255, 255, 255, 0.08)', borderColor: 'rgba(255, 255, 255, 0.15)' }} whileTap={{ scale: 0.98 }} style={{ padding: '20px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', transition: 'all 0.3s ease' }} onClick={() => setCurrentView('admin-dash')}>
+                  <motion.button 
+                    whileHover={{ scale: 1.02, backgroundColor: 'rgba(255, 255, 255, 0.08)', borderColor: 'rgba(56, 189, 248, 0.4)' }} 
+                    whileTap={{ scale: 0.98 }} 
+                    style={{ padding: '24px 20px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }} 
+                    onClick={() => setCurrentView('admin-dash')}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <div style={{ background: 'rgba(56, 189, 248, 0.15)', padding: '12px', borderRadius: '14px', border: '1px solid rgba(56, 189, 248, 0.1)' }}><ShieldCheck size={24} color="#38bdf8" /></div>
+                      <div style={{ background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(2, 132, 199, 0.2))', padding: '14px', borderRadius: '18px', border: '1px solid rgba(56, 189, 248, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <ShieldCheck size={28} color="#38bdf8" />
+                      </div>
                       <div style={{ textAlign: 'left' }}>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc' }}>Admin / Insurer</div>
-                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Operational command center</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.3px' }}>Admin / Insurer</div>
+                        <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '4px', fontWeight: 500 }}>Operational Command Center</div>
                       </div>
                     </div>
-                    <ArrowRightLeft size={20} color="#38bdf8" opacity={0.8} />
+                    <ArrowRightLeft size={22} color="#38bdf8" style={{ filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.4))' }} />
                   </motion.button>
                 </div>
 
@@ -965,323 +1014,172 @@ export default function App() {
         </div>
       </div>
 
-      {/* Layout Content */}
-      <div style={{ background: '#ffffff', borderRadius: '40px 40px 0 0', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#333333' }}>
+      {/* Main Feature Sections Container */}
+      <div style={{ background: '#ffffff', borderRadius: '60px 600px 0 0', marginTop: '-60px', position: 'relative', zIndex: 10, padding: '100px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 -20px 40px rgba(0,0,0,0.05)' }}>
         
-        {/* Experience on the Go Section */}
-        <div style={{ width: '100%', maxWidth: '1250px', margin: '40px auto 140px auto', position: 'relative' }}>
-          {/* Modern Glow Background */}
-          <div style={{ position: 'absolute', top: '-10%', left: '-5%', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(0,103,138,0.06) 0%, transparent 70%)', filter: 'blur(50px)', zIndex: 0 }}></div>
-          <div style={{ position: 'absolute', bottom: '-10%', right: '-5%', width: '500px', height: '500px', background: 'radial-gradient(circle, rgba(0,103,138,0.08) 0%, transparent 70%)', filter: 'blur(50px)', zIndex: 0 }}></div>
-          
-          <div style={{ background: 'linear-gradient(145deg, rgba(255,255,255,1) 0%, rgba(244,250,253,0.9) 100%)', borderRadius: '48px', display: 'flex', overflow: 'hidden', boxShadow: '0 30px 80px rgba(0, 103, 138, 0.1)', position: 'relative', zIndex: 1, border: '1px solid rgba(255,255,255,0.8)', backdropFilter: 'blur(20px)' }}>
-            
-            {/* Left Side */}
-            <div style={{ flex: 1.1, padding: '80px 60px', color: '#00678a', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} viewport={{ once: true }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(0,103,138,0.08)', padding: '8px 16px', borderRadius: '20px', marginBottom: '24px', border: '1px solid rgba(0,103,138,0.1)' }}>
-                   <Zap size={16} color="#00678a" />
-                   <span style={{ fontSize: '0.85rem', fontWeight: 800, letterSpacing: '1px', color: '#00678a' }}>SEAMLESS PROTECTION</span>
-                </div>
-              </motion.div>
-              
-              <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }} viewport={{ once: true }} style={{ fontSize: '3.4rem', fontWeight: 800, lineHeight: 1.15, marginBottom: '24px', background: 'linear-gradient(to right, #00678a, #004b66)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', textShadow: '0 4px 20px rgba(0,103,138,0.08)' }}>
-                Zero-touch parametric engine on your phone.
-              </motion.h2>
-              
-              <motion.p initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }} viewport={{ once: true }} style={{ fontSize: '1.15rem', color: '#555', fontFamily: '"Poppins", sans-serif', lineHeight: 1.7, marginBottom: '40px' }}>
-                Aegis turns your device into an intelligent risk shield. Activate policies, monitor live micro-climate disruptions, and receive instant automated payouts—all without filing paperwork.
-              </motion.p>
-
-              {/* Interactive Benefit Cards */}
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.3 }} viewport={{ once: true }} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '48px' }}>
-                 <motion.div whileHover={{ y: -5, boxShadow: '0 15px 30px rgba(0,103,138,0.1)' }} style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,103,138,0.06)', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', transition: 'all 0.3s ease' }}>
-                    <div style={{ background: 'rgba(0,103,138,0.06)', padding: '12px', borderRadius: '16px' }}><Activity size={24} color="#00678a" /></div>
-                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#333' }}>Risk prediction via<br/>hybrid AI</span>
-                 </motion.div>
-                 <motion.div whileHover={{ y: -5, boxShadow: '0 15px 30px rgba(0,103,138,0.1)' }} style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,103,138,0.06)', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', transition: 'all 0.3s ease' }}>
-                    <div style={{ background: 'rgba(0,103,138,0.06)', padding: '12px', borderRadius: '16px' }}><ShieldCheck size={24} color="#00678a" /></div>
-                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#333' }}>Automated trigger<br/>validation</span>
-                 </motion.div>
-                 <motion.div whileHover={{ y: -5, boxShadow: '0 15px 30px rgba(0,103,138,0.1)' }} style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,103,138,0.06)', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', transition: 'all 0.3s ease' }}>
-                    <div style={{ background: 'rgba(0,103,138,0.06)', padding: '12px', borderRadius: '16px' }}><Map size={24} color="#00678a" /></div>
-                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#333' }}>Real-time trajectory<br/>tracking</span>
-                 </motion.div>
-                 <motion.div whileHover={{ y: -5, boxShadow: '0 15px 30px rgba(0,103,138,0.1)' }} style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,103,138,0.06)', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', transition: 'all 0.3s ease' }}>
-                    <div style={{ background: 'rgba(255,199,44,0.15)', padding: '12px', borderRadius: '16px' }}><Wallet size={24} color="#00678a" /></div>
-                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#333' }}>Automated Resilience<br/>Wallet</span>
-                 </motion.div>
-              </motion.div>
-
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.4 }} viewport={{ once: true }}>
-                <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '16px', color: '#00678a', letterSpacing: '0.5px' }}>GET SECURED NOW</h4>
-                <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-                  {/* Quick Download QR Wrapper */}
-                  <div style={{ background: 'white', padding: '12px', borderRadius: '16px', display: 'flex', gap: '20px', alignItems: 'center', border: '1px solid rgba(0,103,138,0.1)', boxShadow: '0 4px 20px rgba(0,103,138,0.05)' }}>
-                    <div style={{ width: '70px', height: '70px', background: '#f8f9fa', padding: '6px', borderRadius: '10px', display: 'flex', flexWrap: 'wrap', gap: '2px', border: '1px solid #eee' }}>
-                       {Array.from({ length: 25 }).map((_, i) => (
-                         <div key={i} style={{ width: '10px', height: '10px', background: (i % 2 === 0 || i % 5 === 0) ? '#00678a' : 'transparent', borderRadius: '2px' }}></div>
-                       ))}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '10px' }}>
-                       <motion.img whileHover={{ scale: 1.05 }} src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Google Play" style={{ height: '36px', cursor: 'pointer' }} />
-                       <motion.img whileHover={{ scale: 1.05 }} src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="App Store" style={{ height: '36px', cursor: 'pointer' }} />
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-
-            {/* Right Side - Mobile Mockup & App Visuals */}
-            <div style={{ flex: 0.9, position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '600px' }}>
-              <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                 <motion.img 
-                   initial={{ opacity: 0, y: 30 }} 
-                   whileInView={{ opacity: 1, y: 0 }} 
-                   transition={{ duration: 0.8, delay: 0.2 }} 
-                   viewport={{ once: true }}
-                   src="/mobile-mockup.png" 
-                   alt="AEGIS App Mobile Interface" 
-                   style={{ zIndex: 2, height: '550px', objectFit: 'contain', filter: 'drop-shadow(0 30px 60px rgba(0,103,138,0.25))' }} 
-                 />
-                 <motion.img 
-                   initial={{ opacity: 0, x: 40 }} 
-                   whileInView={{ opacity: 1, x: 0 }} 
-                   transition={{ duration: 0.8, delay: 0.5 }} 
-                   viewport={{ once: true }}
-                   src="/bike-illustration.png" 
-                   alt="Gig Worker" 
-                   style={{ zIndex: 1, position: 'absolute', bottom: '20px', right: '-40px', height: '300px', objectFit: 'contain', mixBlendMode: 'multiply', opacity: 0.9 }} 
-                 />
-              </div>
-            </div>
-          </div>
-        </div>
         {/* Why Choose AEGIS Section */}
-        <div style={{ maxWidth: '1000px', width: '100%', marginBottom: '100px', textAlign: 'center' }}>
-          <div style={{ color: '#FFC72C', fontWeight: 800, letterSpacing: '1px', marginBottom: '16px' }}>WHY CHOOSE AEGIS?</div>
-          <h2 style={{ fontSize: '3rem', color: '#00678a', margin: '0 0 24px 0', lineHeight: 1.2, fontWeight: 800 }}>
-            Reliable. Intelligent. Instant.
-          </h2>
-          <p style={{ fontSize: '1.25rem', color: '#555555', fontFamily: '"Poppins", sans-serif', lineHeight: 1.8, marginBottom: '32px', fontWeight: 500 }}>
-            At AEGIS, we redefine protection for the modern gig economy.
-          </p>
-          <p style={{ fontSize: '1.1rem', color: '#666666', fontFamily: '"Poppins", sans-serif', lineHeight: 1.7, marginBottom: '48px' }}>
-            Whether it’s extreme weather conditions, hazardous air quality, civic disruptions, or unexpected platform outages, AEGIS stands by workers when their income is at risk. Our system doesn’t just react—it predicts, verifies, and responds in real time.
-          </p>
-          
-          <div style={{ background: 'rgba(0, 103, 138, 0.03)', padding: '40px', borderRadius: '24px', border: '1px solid rgba(0, 103, 138, 0.1)', textAlign: 'left', marginBottom: '40px' }}>
-            <p style={{ fontSize: '1.1rem', color: '#333333', fontFamily: '"Poppins", sans-serif', fontWeight: 600, marginBottom: '24px' }}>
-              Powered by advanced AI models and a zero-trust Double-Lock Engine, AEGIS ensures that every payout is:
+        <div style={{ maxWidth: '1100px', width: '100%', marginBottom: '120px', textAlign: 'center' }}>
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} viewport={{ once: true }}>
+            <div style={{ color: '#F59E0B', fontWeight: 800, letterSpacing: '2px', marginBottom: '16px', fontSize: '0.9rem' }}>VALUE PROPOSITION</div>
+            <h2 style={{ fontSize: '3.6rem', color: '#0f172a', margin: '0 0 24px 0', lineHeight: 1.1, fontWeight: 900, letterSpacing: '-1.5px' }}>
+              Reliable. Intelligent. <span style={{ color: '#00678a' }}>Instant.</span>
+            </h2>
+            <p style={{ fontSize: '1.35rem', color: '#64748b', fontFamily: '"Outfit", sans-serif', lineHeight: 1.6, marginBottom: '48px', maxWidth: '850px', margin: '0 auto 48px auto' }}>
+              We've redefined income security for the modern gig economy. No more paperwork, no more waiting—just pure, data-driven resilience.
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <CheckCircle size={24} color="#00678a" />
-                <span style={{ fontSize: '1.1rem', fontFamily: '"Poppins", sans-serif' }}><strong style={{ color: '#00678a' }}>Accurate</strong> – No false claims, no missed risks</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <CheckCircle size={24} color="#00678a" />
-                <span style={{ fontSize: '1.1rem', fontFamily: '"Poppins", sans-serif' }}><strong style={{ color: '#00678a' }}>Instant</strong> – Automated settlements within seconds</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <CheckCircle size={24} color="#00678a" />
-                <span style={{ fontSize: '1.1rem', fontFamily: '"Poppins", sans-serif' }}><strong style={{ color: '#00678a' }}>Transparent</strong> – Fully explainable decision logic</span>
-              </div>
-            </div>
-          </div>
-
-          <p style={{ fontSize: '1.1rem', color: '#666666', fontFamily: '"Poppins", sans-serif', lineHeight: 1.7, marginBottom: '32px' }}>
-            From preventing losses through proactive alerts to enabling instant, paperwork-free payouts, AEGIS delivers a safety net that truly works when it matters most.
-          </p>
+          </motion.div>
           
-          <div style={{ borderTop: '2px solid #f0f0f0', borderBottom: '2px solid #f0f0f0', padding: '32px 0', display: 'inline-block', width: '100%' }}>
-            <h3 style={{ fontSize: '1.8rem', color: '#333333', fontWeight: 600, margin: '0 0 8px 0' }}>We are not just insurance.</h3>
-            <h3 style={{ fontSize: '2.2rem', color: '#00678a', fontWeight: 800, margin: 0 }}>We are income security, reimagined.</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '30px', textAlign: 'left' }}>
+            {[
+              { title: "Accurate", desc: "No false claims, no missed risks. Our AI models analyze hyper-local environmental data in real-time.", icon: <Activity size={32} color="#00678a" /> },
+              { title: "Instant", desc: "Automated settlements within seconds. Verified claims bypass NEFT delays via direct Razorpay rails.", icon: <Zap size={32} color="#F59E0B" /> },
+              { title: "Transparent", desc: "Fully explainable decision logic. You see exactly what triggered your payout and when.", icon: <Shield size={32} color="#00678a" /> }
+            ].map((item, idx) => (
+              <motion.div key={idx} whileHover={{ y: -8 }} style={{ background: 'rgba(0,103,138,0.02)', padding: '40px', borderRadius: '32px', border: '1px solid rgba(0,103,138,0.05)', transition: 'all 0.3s ease' }}>
+                <div style={{ marginBottom: '24px' }}>{item.icon}</div>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', marginBottom: '16px' }}>{item.title}</h3>
+                <p style={{ color: '#64748b', lineHeight: 1.6, fontSize: '1.05rem' }}>{item.desc}</p>
+              </motion.div>
+            ))}
           </div>
         </div>
-        
-        {/* The Problem Solved Section */}
-        <div style={{ maxWidth: '1100px', display: 'flex', gap: '60px', alignItems: 'center', marginBottom: '100px' }}>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <div style={{ width: '100%', height: '320px', background: 'rgba(0, 103, 138, 0.05)', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(0, 103, 138, 0.1)' }}>
-               <Shield size={160} color="#00678a" opacity={0.1} />
-               <div style={{ position: 'absolute' }}>
-                 <BrainCircuit size={100} color="#00678a" />
-               </div>
-            </div>
-          </div>
-          <div style={{ flex: 1.5 }}>
-            <div style={{ color: '#FFC72C', fontWeight: 800, letterSpacing: '1px', marginBottom: '12px' }}>THE PROBLEM SOLVED</div>
-            <h2 style={{ fontSize: '2.6rem', color: '#00678a', margin: '0 0 20px 0', lineHeight: 1.2, fontWeight: 800 }}>Solving the Sunk-Cost Fallacy</h2>
-            <p style={{ color: '#555555', fontFamily: '"Poppins", sans-serif', lineHeight: 1.7, fontSize: '1.1rem', marginBottom: '20px' }}>
-              Traditional insurance fails because of Basis Risk (paying out when no local loss occurred) and Adverse Selection (fraud rings). Furthermore, gig workers operate on razor-thin margins and hate paying for something they don't use.
-            </p>
-            <p style={{ color: '#555555', fontFamily: '"Poppins", sans-serif', lineHeight: 1.7, fontSize: '1.1rem', fontWeight: 500 }}>
-              Aegis solves all three. We mathematically align the worker's financial success with our platform's profitability using multi-modal AI and gamified behavioral micro-savings.
-            </p>
+          
+          <div style={{ borderTop: '1px solid rgba(0,0,0,0.05)', width: '100%', padding: '60px 0 0 0', textAlign: 'center' }}>
+            <h3 style={{ fontSize: '2rem', color: '#0f172a', fontWeight: 900, margin: '0 0 16px 0', letterSpacing: '-0.5px' }}>Income security, <span style={{ color: '#00678a' }}>reimagined.</span></h3>
+            <p style={{ color: '#64748b', fontSize: '1.1rem', marginBottom: '40px' }}>Join the thousands of workers protecting their livelihood with Aegis.</p>
+            <motion.button 
+              whileHover={{ scale: 1.05, boxShadow: '0 20px 40px rgba(0, 103, 138, 0.2)' }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              style={{ padding: '18px 36px', background: '#00678a', color: 'white', border: 'none', borderRadius: '1000px', fontWeight: 800, fontSize: '1.1rem', cursor: 'pointer' }}
+            >
+              Deploy Protection Now
+            </motion.button>
           </div>
         </div>
 
         {/* Features Grid */}
-        <div style={{ width: '100%', maxWidth: '1200px' }}>
-          <div style={{ textAlign: 'center', marginBottom: '60px' }}>
-            <h2 style={{ fontSize: '2.6rem', color: '#00678a', marginBottom: '16px', fontWeight: 800 }}>Zero-Trust Parametric Engine</h2>
-            <p style={{ color: '#666666', fontFamily: '"Poppins", sans-serif', fontSize: '1.15rem', margin: '0 auto', maxWidth: '700px', lineHeight: 1.6 }}>
-              Aegis treats the worker's smartphone as a multi-modal IoT sensor, crushing coordinated fraud rings before they drain the liquidity pool.
+        <div style={{ width: '100%', maxWidth: '1200px', marginTop: '120px', marginBottom: '120px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '80px' }}>
+            <h2 style={{ fontSize: '3rem', color: '#0f172a', marginBottom: '24px', fontWeight: 900, letterSpacing: '-1.5px' }}>Zero-Trust <span style={{ color: '#00678a' }}>Parametric Engine</span></h2>
+            <p style={{ color: '#64748b', fontFamily: '"Outfit", sans-serif', fontSize: '1.25rem', margin: '0 auto', maxWidth: '800px', lineHeight: 1.6 }}>
+              Aegis treats the worker's smartphone as a multi-modal IoT sensor, crushing fraud rings before they drain the liquidity pool.
             </p>
           </div>
           
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '40px' }}>
-            
-            <div style={{ background: '#ffffff', padding: '40px 32px', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.06)', border: '1px solid #f0f0f0' }}>
-              <div style={{ background: 'rgba(0, 103, 138, 0.1)', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-                <Zap size={32} color="#00678a" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '30px' }}>
+            {[
+              { title: "AI Physics Validation", desc: "Our CNN Model analyzes native accelerometers for 0-axis anomalies. Genuine micro-movements are verified instantly.", icon: <Zap size={32} color="#00678a" /> },
+              { title: "Temporal Transformer", desc: "Detects syndicate farms by analyzing Wi-Fi BSSIDs and indoor battery thermals across clusters.", icon: <Radio size={32} color="#00678a" /> },
+              { title: "The Resilience Wallet", desc: "A portion of every premium funds personal micro-savings. Claim-free streaks accumulate balances automatically.", icon: <Wallet size={32} color="#00678a" /> }
+            ].map((item, idx) => (
+              <div key={idx} style={{ background: '#ffffff', padding: '48px 40px', borderRadius: '32px', boxShadow: '0 10px 30px rgba(0,0,0,0.04)', border: '1px solid #f1f5f9', transition: 'transform 0.3s ease' }}>
+                <div style={{ background: 'rgba(0,103,138,0.06)', width: '64px', height: '64px', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '28px' }}>
+                  {item.icon}
+                </div>
+                <h3 style={{ fontSize: '1.4rem', color: '#0f172a', marginBottom: '16px', fontWeight: 800 }}>{item.title}</h3>
+                <p style={{ color: '#64748b', fontSize: '1rem', lineHeight: 1.6 }}>{item.desc}</p>
               </div>
-              <h3 style={{ fontSize: '1.3rem', color: '#00678a', marginBottom: '12px', fontWeight: 800 }}>AI Physics Validation</h3>
-              <p style={{ color: '#666666', fontFamily: '"Poppins", sans-serif', fontSize: '0.95rem', lineHeight: 1.6 }}>Our Hybrid CNN Model analyzes the native accelerometer for 0-axis anomalies. A genuine rider stuck in a flood makes micro-movements; a spoofed emulator sits perfectly flat.</p>
-            </div>
-            
-            <div style={{ background: '#ffffff', padding: '40px 32px', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.06)', border: '1px solid #f0f0f0' }}>
-              <div style={{ background: 'rgba(0, 103, 138, 0.1)', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-                <Radio size={32} color="#00678a" />
-              </div>
-              <h3 style={{ fontSize: '1.3rem', color: '#00678a', marginBottom: '12px', fontWeight: 800 }}>Temporal Transformer</h3>
-              <p style={{ color: '#666666', fontFamily: '"Poppins", sans-serif', fontSize: '0.95rem', lineHeight: 1.6 }}>If multiple "stranded" riders are spread across a zone but ping the exact same Wi-Fi BSSID and show indoor battery thermals, the syndicate farm is automatically blocked.</p>
-            </div>
-
-            <div style={{ background: '#ffffff', padding: '40px 32px', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.06)', border: '1px solid #f0f0f0' }}>
-              <div style={{ background: 'rgba(255, 199, 44, 0.2)', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-                <BarChart2 size={32} color="#ffb000" />
-              </div>
-              <h3 style={{ fontSize: '1.3rem', color: '#00678a', marginBottom: '12px', fontWeight: 800 }}>Dynamic Actuarial Pricing</h3>
-              <p style={{ color: '#666666', fontFamily: '"Poppins", sans-serif', fontSize: '0.95rem', lineHeight: 1.6 }}>LSTMs analyze 4-week earning averages against 7-day Guidewire HazardHub weather forecasts to calculate precise, dynamic weekly premiums (Pw).</p>
-            </div>
-
-            <div style={{ background: '#ffffff', padding: '40px 32px', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.06)', border: '1px solid #f0f0f0' }}>
-              <div style={{ background: 'rgba(0, 103, 138, 0.1)', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-                <Wallet size={32} color="#00678a" />
-              </div>
-              <h3 style={{ fontSize: '1.3rem', color: '#00678a', marginBottom: '12px', fontWeight: 800 }}>The Resilience Wallet</h3>
-              <p style={{ color: '#666666', fontFamily: '"Poppins", sans-serif', fontSize: '0.95rem', lineHeight: 1.6 }}>A portion of every premium funds the worker's personal micro-savings. Claim-free streaks accumulate balances that automatically pay for their next premium.</p>
-            </div>
-
-            <div style={{ background: '#ffffff', padding: '40px 32px', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.06)', border: '1px solid #f0f0f0' }}>
-              <div style={{ background: 'rgba(0, 103, 138, 0.1)', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-                <Wind size={32} color="#00678a" />
-              </div>
-              <h3 style={{ fontSize: '1.3rem', color: '#00678a', marginBottom: '12px', fontWeight: 800 }}>Double-Lock Trigger</h3>
-              <p style={{ color: '#666666', fontFamily: '"Poppins", sans-serif', fontSize: '0.95rem', lineHeight: 1.6 }}>Payouts require both Objective Disruption (Rainfall/AQI API thresholds) AND Operational Impairment (DBSCAN cluster speeds dropping below 5 km/h).</p>
-            </div>
-
-            <div style={{ background: '#ffffff', padding: '40px 32px', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.06)', border: '1px solid #f0f0f0' }}>
-              <div style={{ background: 'rgba(255, 199, 44, 0.2)', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-                <Send size={32} color="#ffb000" />
-              </div>
-              <h3 style={{ fontSize: '1.3rem', color: '#00678a', marginBottom: '12px', fontWeight: 800 }}>Instant UPI Settlements</h3>
-              <p style={{ color: '#666666', fontFamily: '"Poppins", sans-serif', fontSize: '0.95rem', lineHeight: 1.6 }}>By orchestrating Guidewire ClaimCenter with Razorpay routes, verified claims bypass NEFT delays and hit the worker's bank account in under 90 seconds.</p>
+            ))}
           </div>
         </div>
 
         <InfoSection />
-        <Testimonials />
-      </div>
+        <div style={{ margin: '60px 0 w-full' }}><Testimonials /></div>
 
-      {/* Coverage Section */}
-      <div style={{ width: '100%', background: '#F9FAFB', padding: '100px 20px', display: 'flex', justifyContent: 'center' }}>
-        <div style={{ maxWidth: '1200px', width: '100%' }}>
-          <div style={{ textAlign: 'center', marginBottom: '60px' }}>
-            <h2 style={{ fontSize: '3rem', color: '#0A1F2E', marginBottom: '24px', fontWeight: 800, fontFamily: '"Syne", sans-serif' }}>What is Covered by AEGIS Income Protection?</h2>
-            <p style={{ fontSize: '1.2rem', color: '#5A7A8A', fontFamily: '"DM Sans", sans-serif', maxWidth: '800px', margin: '0 auto', lineHeight: 1.6 }}>
-              AEGIS provides real-time, AI-driven income protection for gig workers against both predictable and unexpected disruptions. Here's exactly what your policy covers.
-            </p>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '40px', background: 'white', padding: '60px', borderRadius: '32px', boxShadow: '0 20px 40px rgba(0,0,0,0.05)' }}>
-            
-            {/* What's Covered */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
-                <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '50%' }}>
-                  <CheckCircle size={28} color="#10b981" />
-                </div>
-                <h3 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0A1F2E', margin: 0 }}>What's Covered</h3>
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                {[
-                  { title: "Income Loss Due to Disruptions", desc: "AEGIS compensates for verified loss of earnings caused by events like heavy rain, strikes, or platform outages—calculated using real-time activity data." },
-                  { title: "Weather-Based Events", desc: "Coverage includes income disruption due to: Monsoons, Flooding, Extreme heat / AQI spikes, Storms and cyclones." },
-                  { title: "Civic & Man-Made Disruptions", desc: "We cover losses caused by: Strikes and protests, Road blockages, Government restrictions, Unexpected urban disruptions." },
-                  { title: "Platform Downtime Protection", desc: "If gig platforms face server crashes, order drops, or app outages—AEGIS ensures your income is still protected." },
-                  { title: "Fraud-Protected Claims", desc: "Spatial CNN detects fake movement & GPS spoofing. Temporal Transformer detects fraud networks. Only genuine claims are paid instantly." },
-                  { title: "Instant Payouts", desc: "Once a disruption is verified, claims are processed in under 90 seconds and money is directly credited to your UPI account." },
-                  { title: "Resilience Wallet Benefits", desc: "Unused premiums are not wasted: Converted into a Resilience Wallet, used for future coverage or free protection weeks." },
-                  { title: "Offline Protection (UX Trust Protocol)", desc: "Even if your network fails: Data is securely cached, synced later, and ensures fair payouts without penalties." }
-                ].map((item, idx) => (
-                  <div key={idx} style={{ display: 'flex', gap: '16px' }}>
-                    <div style={{ marginTop: '4px' }}>
-                      <CheckCircle2 size={24} color="#10b981" fill="#ecfdf5" style={{ borderRadius: '50%' }} />
-                    </div>
-                    <div>
-                      <h4 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#0A1F2E', marginBottom: '8px' }}>{item.title}</h4>
-                      <p style={{ fontSize: '1rem', color: '#5A7A8A', lineHeight: 1.6 }}>{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* Coverage Section */}
+        <div style={{ width: '100%', maxWidth: '1200px', background: '#F8FAFC', padding: '100px 40px', borderRadius: '48px', display: 'flex', justifyContent: 'center', marginBottom: '100px', border: '1px solid #f1f5f9' }}>
+          <div style={{ maxWidth: '1100px', width: '100%' }}>
+            <div style={{ textAlign: 'center', marginBottom: '80px' }}>
+              <h2 style={{ fontSize: '3.2rem', color: '#0f172a', marginBottom: '24px', fontWeight: 900, letterSpacing: '-1.5px' }}>Coverage Scope</h2>
+              <p style={{ fontSize: '1.25rem', color: '#64748b', maxWidth: '800px', margin: '0 auto', lineHeight: 1.6 }}>
+                Real-time, AI-driven income protection against both environmental and social disruptions.
+              </p>
             </div>
 
-            {/* What's Not Covered & Advantage */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
-                <div style={{ background: '#fef2f2', padding: '12px', borderRadius: '50%' }}>
-                  <AlertOctagon size={28} color="#ef4444" />
-                </div>
-                <h3 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0A1F2E', margin: 0 }}>What's Not Covered</h3>
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '50px' }}>
-                {[
-                  "Fake or manipulated activity (blocked by AI fraud engine)",
-                  "Voluntary inactivity (not working by choice)",
-                  "Non-verified income loss",
-                  "Device tampering or integrity violations"
-                ].map((item, idx) => (
-                  <div key={idx} style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                    <AlertOctagon size={20} color="#ef4444" />
-                    <span style={{ fontSize: '1.05rem', color: '#5A7A8A', fontWeight: 500 }}>{item}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ background: 'linear-gradient(135deg, #FFC72C, #F59E0B)', borderRadius: '24px', padding: '32px', color: '#0f172a', boxShadow: '0 15px 30px rgba(245, 158, 11, 0.2)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                  <Zap size={28} fill="currentColor" />
-                  <h3 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0 }}>AEGIS Advantage</h3>
-                </div>
-                <p style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '24px', opacity: 0.9 }}>Unlike traditional insurance:</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '60px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0f172a', marginBottom: '40px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <CheckCircle size={32} color="#10b981" /> What's Protected
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                   {[
-                    "Zero paperwork",
-                    "Zero delays",
-                    "Zero fraud leakage",
-                    "100% data-driven payouts"
+                    { t: "Weather Disruptions", d: "Monsoons, Flooding, Extreme Heat, and AQI spikes." },
+                    { t: "Civic Disruptions", d: "Strikes, road blockages, and urban restrictions." },
+                    { t: "Platform Downtime", d: "Orders dropping or app outages." },
+                    { t: "Instant UPI Payouts", d: "Verified claims hit your account in <90 seconds." }
                   ].map((item, idx) => (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <CheckCircle2 size={22} color="#0f172a" />
-                      <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>{item}</span>
+                    <div key={idx} style={{ display: 'flex', gap: '20px' }}>
+                      <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '4px' }}>
+                        <CheckCircle2 size={16} color="#10b981" />
+                      </div>
+                      <div>
+                        <h4 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#0f172a', marginBottom: '4px' }}>{item.t}</h4>
+                        <p style={{ color: '#64748b', lineHeight: 1.5 }}>{item.d}</p>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
-            </div>
 
+              <div>
+                <div style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', borderRadius: '32px', padding: '40px', color: 'white', height: 'fit-content', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+                  <h3 style={{ fontSize: '1.6rem', fontWeight: 800, marginBottom: '24px', color: '#FFC72C' }}>AEGIS Advantage</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {["Zero Paperwork", "Zero Delays", "Zero Fraud Leakage", "Built for Guidewire"].map((txt, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Zap size={20} color="#FFC72C" />
+                        <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>{txt}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+
+      <footer style={{ background: '#0f172a', padding: '120px 20px 60px 20px', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ maxWidth: '1200px', width: '100%', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '60px', marginBottom: '80px' }}>
+          <div style={{ gridColumn: 'span 2' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+              <Shield size={36} color="#FFC72C" />
+              <span style={{ fontSize: '2rem', fontWeight: 900, letterSpacing: '-1.5px' }}>AEGIS <span style={{ color: '#FFC72C' }}>DEV</span>Trails</span>
+            </div>
+            <p style={{ color: '#94a3b8', fontSize: '1.1rem', lineHeight: 1.7, maxWidth: '450px' }}>
+              The world's first fully automated, zero-trust parametric income protection platform for the global gig workforce. Validating resilience, one order at a time.
+            </p>
+          </div>
+          <div>
+            <h4 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '24px' }}>Platform</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#64748b', fontSize: '1rem' }}>
+              <span>AI Risk Engine</span>
+              <span>Guidewire Synced</span>
+              <span>Resilience Wallet</span>
+              <span>Smart Payouts</span>
+            </div>
+          </div>
+          <div>
+            <h4 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '24px' }}>Support</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#64748b', fontSize: '1rem' }}>
+              <span>Documentation</span>
+              <span>Developer API</span>
+              <span>Help Center</span>
+              <span>Safety Protocol</span>
+            </div>
+          </div>
+        </div>
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', width: '100%', maxWidth: '1200px', paddingTop: '40px', display: 'flex', justifyContent: 'space-between', color: '#475569', fontSize: '0.95rem' }}>
+           <span>© 2026 Aegis DevTrails. All rights reserved.</span>
+           <div style={{ display: 'flex', gap: '30px' }}>
+              <span>Privacy</span>
+              <span>Terms</span>
+              <span>Cookies</span>
+           </div>
+        </div>
+      </footer>
     </div>
-  </div>
-);
+  );
 
   const renderOnboarding = () => (
     <RegistrationFlow 
@@ -2143,7 +2041,6 @@ export default function App() {
                     <button className="btn btn-primary" style={{ width: '100%', marginBottom: '8px' }} onClick={() => setRiderTab('explore-plans')}>
                       {hasActivePolicy ? 'Upgrade Coverage' : 'Browse All Plans'}
                     </button>
-                    <button className="btn btn-outline" style={{ width: '100%' }}>Manage Current Plan</button>
                   </div>
 
                   {/* Zone Risk Score */}
@@ -2779,6 +2676,61 @@ export default function App() {
     </AnimatePresence>
   );
 
+  const renderRazorpayPayoutPopup = () => (
+    <AnimatePresence>
+      {razorpayPopupData && (
+        <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            style={{
+              position: 'fixed',
+              bottom: '40px',
+              right: '40px',
+              background: 'linear-gradient(135deg, #02042b 0%, #0c337a 100%)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '20px',
+              padding: '24px',
+              width: '320px',
+              zIndex: 100000,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Glossy top highlight */}
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '40%', background: 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 100%)', pointerEvents: 'none' }} />
+            
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '28px', height: '28px', background: '#3399cc', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ color: 'white', fontWeight: 900, fontSize: '1rem', lineHeight: 1 }}>R</span>
+                </div>
+                <span style={{ color: 'white', fontWeight: 800, fontSize: '1rem', letterSpacing: '0.5px' }}>Razorpay</span>
+              </div>
+              <div style={{ background: 'rgba(16, 185, 129, 0.2)', padding: '4px 10px', borderRadius: '100px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <CheckCircle2 size={12} color="#10b981" />
+                <span style={{ color: '#10b981', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>Success</span>
+              </div>
+            </div>
+
+            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', fontWeight: 500, marginBottom: '4px' }}>Parametric Settlement</div>
+            <div style={{ color: 'white', fontSize: '2.5rem', fontWeight: 900, letterSpacing: '-1px', marginBottom: '8px' }}>
+              ₹{razorpayPopupData.amount.toLocaleString()}
+            </div>
+            <div style={{ color: '#94a3b8', fontSize: '0.8rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '16px', marginBottom: '16px', lineHeight: 1.4 }}>
+              Instantly credited to your linked UPI account ({razorpayPopupData.bank}) for lost wages due to <strong>{razorpayPopupData.reason}</strong>.
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ flex: 1, height: '36px', background: 'rgba(255,255,255,0.1)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 600 }}>Txn ID: pay_{Math.random().toString(36).substring(2, 10)}</span>
+              </div>
+            </div>
+          </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   return (
     <>
       {currentView === 'login' && renderLogin()}
@@ -2800,11 +2752,12 @@ export default function App() {
         </div>
       )}
       {currentView === 'rider-dash' && renderRiderDashboard()}
-      {currentView === 'admin-dash' && <ControlCenter setCurrentView={setCurrentView} adminLogs={adminLogs} engineStates={engineStates} injectScenario={injectScenario} resetEngines={resetEngines} parametricTriggerResult={parametricTriggerResult} setParametricTriggerResult={setParametricTriggerResult} parametricCity={parametricCity} setParametricCity={setParametricCity} parametricTriggerLoading={parametricTriggerLoading} handleParametricRainTrigger={handleParametricRainTrigger} handleParametricHeatTrigger={handleParametricHeatTrigger} handleParametricStrikeTrigger={handleParametricStrikeTrigger} />}
+      {currentView === 'admin-dash' && <ControlCenter setCurrentView={setCurrentView} workerId={workerId} adminLogs={adminLogs} engineStates={engineStates} injectScenario={injectScenario} resetEngines={resetEngines} parametricTriggerResult={parametricTriggerResult} setParametricTriggerResult={setParametricTriggerResult} parametricCity={parametricCity} setParametricCity={setParametricCity} parametricTriggerLoading={parametricTriggerLoading} handleParametricRainTrigger={handleParametricRainTrigger} handleParametricHeatTrigger={handleParametricHeatTrigger} handleParametricStrikeTrigger={handleParametricStrikeTrigger} />}
       {renderAddMoneyModal()}
       {renderConfirmPlanModal()}
       {renderErrorModal()}
       {renderPlanPromptToast()}
+      {renderRazorpayPayoutPopup()}
       <Chatbot callbackPhone={riderInfo.mobile || ''} />
     </>
   );

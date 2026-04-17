@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, Info, Camera, Loader2, CheckCircle2, ChevronRight, User, MapPin, ShieldCheck, Lock, CalendarClock, Phone, Mail, ShieldAlert } from 'lucide-react';
 import axios from 'axios';
@@ -33,6 +33,55 @@ export default function RegistrationFlow({
   const [activationAlert, setActivationAlert] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
+  // Camera feature
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  const startCamera = async () => {
+    setShowCameraModal(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Camera access Error:", err);
+      setPhotoPreview('/mock_selfie.png');
+      setShowCameraModal(false);
+    }
+  };
+
+  const closeCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setShowCameraModal(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth || 300;
+      canvas.height = videoRef.current.videoHeight || 300;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/png');
+      setPhotoPreview(dataUrl);
+    }
+    closeCamera();
+  };
+
   // Constants
   const platformsList = ['Zomato', 'Swiggy', 'Zepto', 'Blinkit', 'Amazon', 'Dunzo'];
   const vehiclesList = ['Cycle', '2-Wheeler', 'E-Bike', 'Cargo Auto'];
@@ -52,6 +101,11 @@ export default function RegistrationFlow({
     }
     setAadhaarInput(formattedStr.substring(0, 14));
     setRiderInfo({ ...riderInfo, aadhaar: formattedStr.substring(0, 14) });
+  };
+
+  const handleMobileChange = (e) => {
+    const val = e.target.value.replace(/\D/g, '').substring(0, 10);
+    setRiderInfo({ ...riderInfo, mobile: val });
   };
 
   const handleAadhaarVerify = () => {
@@ -222,13 +276,33 @@ export default function RegistrationFlow({
                       <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#0A1F2E', marginBottom: '8px' }}>1. Biometric Benchmark</h3>
                       <p style={{ fontSize: '14px', color: '#5A7A8A', margin: 0, maxWidth: '300px', lineHeight: 1.5 }}>Your photo is strictly used for facial recognition matching during claim submission.</p>
                     </div>
-                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', border: '3px dashed #1279A8', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F0F7FB', overflow: 'hidden', boxShadow: 'inset 0 4px 10px rgba(0,0,0,0.05)' }}>
-                      {photoPreview ? <img src={photoPreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Profile" /> : <Camera size={32} color="#1279A8" />}
+                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', border: photoPreview ? 'none' : '3px dashed #1279A8', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F0F7FB', overflow: 'hidden', boxShadow: photoPreview ? '0 8px 16px rgba(0,0,0,0.1)' : 'inset 0 4px 10px rgba(0,0,0,0.05)', position: 'relative' }}>
+                      {photoPreview === 'scanning' && (
+                        <div style={{ position: 'absolute', width: '100%', height: '100%', background: 'rgba(18, 121, 168, 0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                          <Loader2 className="animate-spin" size={24} color="#1279A8" />
+                        </div>
+                      )}
+                      
+                      {photoPreview && photoPreview !== 'scanning' ? (
+                        <img src={photoPreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Profile" />
+                      ) : photoPreview !== 'scanning' ? (
+                        <Camera size={32} color="#1279A8" />
+                      ) : null}
                     </div>
                   </div>
                   
-                  <button className="reg-btn reg-btn-outline" style={{ padding: '12px 24px', fontSize: '15px', width: '100%' }} onClick={() => setPhotoPreview('https://img.icons8.com/bubbles/100/000000/user-male.png')}>
-                    <Camera size={18} /> Take Live Selfie
+                  <button 
+                    className={`reg-btn ${photoPreview && photoPreview !== 'scanning' ? 'reg-btn-verified' : showCameraModal ? 'reg-btn-amber' : 'reg-btn-outline'}`} 
+                    style={{ padding: '12px 24px', fontSize: '15px', width: '100%', transition: 'all 0.3s' }} 
+                    onClick={() => {
+                      if(photoPreview) return;
+                      startCamera();
+                    }}
+                    disabled={photoPreview != null || showCameraModal}
+                  >
+                    {!photoPreview && !showCameraModal && <><Camera size={18} /> Take Live Selfie</>}
+                    {showCameraModal && <><Loader2 size={18} className="animate-spin" /> Starting Camera...</>}
+                    {photoPreview && photoPreview !== 'scanning' && <><CheckCircle2 size={18} /> Verified FaceMatch</>}
                   </button>
                 </div>
 
@@ -250,7 +324,15 @@ export default function RegistrationFlow({
                     <div style={{ position: 'relative' }}>
                       <label className="reg-label">Mobile Number</label>
                       <Phone size={18} color="#94A3B8" style={{ position: 'absolute', top: '44px', left: '16px' }} />
-                      <input type="text" className="reg-input" placeholder="+91 98765 43210" style={{ paddingLeft: '44px' }} value={riderInfo.mobile} onChange={e => setRiderInfo({...riderInfo, mobile: e.target.value})} />
+                      <input 
+                        type="text" 
+                        className="reg-input" 
+                        placeholder="98765 43210" 
+                        style={{ paddingLeft: '44px' }} 
+                        value={riderInfo.mobile} 
+                        onChange={handleMobileChange} 
+                        maxLength="10"
+                      />
                     </div>
                     <div style={{ position: 'relative' }}>
                       <label className="reg-label">Email Address</label>
@@ -307,7 +389,7 @@ export default function RegistrationFlow({
                     <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '32px' }}>
                       <input type="text" className="reg-input" placeholder="someone@upi" style={{ flex: '1 1 250px', fontSize: '16px', background: '#FFFFFF', border: '2px solid #E2E8F0', padding: '16px' }} value={upiInputVal} onChange={e => setUpiInputVal(e.target.value)} disabled={upiStatus === 'verified'} />
                       <button className={`reg-btn ${upiStatus === 'verified' ? 'reg-btn-verified' : 'reg-btn-amber'}`} onClick={handleUpiVerify} disabled={upiStatus !== 'idle'} style={{ flex: '0 0 auto', padding: '16px 24px' }}>
-                        {upiStatus === 'idle' && 'Penny-drop ₹1 Verification'}
+                        {upiStatus === 'idle' && 'Verify Bank Details (₹0)'}
                         {upiStatus === 'loading' && <><Loader2 size={20} className="animate-spin" /> Verifying Bank...</>}
                         {upiStatus === 'verified' && <><CheckCircle2 size={20} /> Bank Account Linked</>}
                       </button>
@@ -556,6 +638,33 @@ export default function RegistrationFlow({
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Selfie Camera Modal */}
+      <AnimatePresence>
+        {showCameraModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.8)', zIndex: 9999,
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}
+          >
+            <div style={{ background: 'white', padding: '32px', borderRadius: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '90%', maxWidth: '400px' }}>
+              <h3 style={{ marginTop: 0, marginBottom: '24px', color: '#0A1F2E', fontSize: '20px', fontWeight: 800 }}>Position your face</h3>
+              <div style={{ width: '250px', height: '250px', borderRadius: '50%', overflow: 'hidden', border: '4px solid #1279A8', marginBottom: '24px', background: '#000' }}>
+                <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+              <div style={{ display: 'flex', gap: '16px', width: '100%' }}>
+                <button className="reg-btn reg-btn-outline" style={{ flex: 1 }} onClick={closeCamera}>Cancel</button>
+                <button className="reg-btn reg-btn-primary" style={{ flex: 1 }} onClick={capturePhoto}>Capture & Confirm</button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
